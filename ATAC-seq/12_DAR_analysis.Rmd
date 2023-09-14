@@ -1,0 +1,778 @@
+---
+title: "12_differential_accessibility_analysis"
+output: html_document
+date: '2023-01-25'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Differentially Accessible Region Analysis 
+
+```{r}
+#install.packages(knitr)
+#install.packages(rmdformats)
+#install.packages(dplyr)
+#install.packages(DT)
+#install.packages(tidyr)
+#install.packages(ggplot2)
+#install.packages(magrittr)
+#install.packages(devtools)
+ 
+ #source("https://bioconductor.org/biocLite.R")
+ 
+ # Needed for mac and Linux only
+#BiocManager::install("Rsubread")
+#BiocManager::install("Rsamtools")
+#BiocManager::install("GenomicAlignments")
+#BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
+#BiocManager::install("soGGi")
+#BiocManager::install("rtracklayer")
+#BiocManager::install("ChIPQC")
+#BiocManager::install("ChIPseeker")
+#BiocManager::install("rGREAT")
+#BiocManager::install("limma")
+#BiocManager::install("DESeq2")
+#BiocManager::install("tracktables")
+#BiocManager::install("clusterProfiler")
+#BiocManager::install("org.Hs.eg.db")
+#BiocManager::install("MotifDb")
+#BiocManager::install("Biostrings")
+#BiocManager::install("edgeR")
+#BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
+```
+
+## Differential accessibility analysis using DESeq2
+
+```{r}
+library(DESeq2)
+load("~/project/Gozde_data/ATACseq/R_objs/myCounts.RData")
+
+# define the groups
+Group <- factor(c("AI","AI","AI","AI","AU","AU", "AU", "AU","DI", "DI", "DI", "DU","DU", "DU"))
+
+# create DESeq2 object
+metaData <- data.frame(Group, row.names = colnames(myCounts))
+atacDDS <- DESeqDataSetFromMatrix(myCounts, metaData, ~Group, rowRanges = consensusToCount)
+atacDDS <- DESeq(atacDDS)
+atac_Rlog <- rlog(atacDDS)
+
+# save
+save(atacDDS, file="~/project/Gozde_data/ATACseq/R_objs/atacDDS.RData")
+
+# plot
+plotPCA(atac_Rlog, intgroup = "Group", ntop = nrow(atac_Rlog))
+```
+
+- Perform test for any differences in ATAC-seq signal between APH (A) and DMSO (D) samples.
+
+```{r}
+library(DESeq2)
+library(BSgenome.Hsapiens.UCSC.hg38)
+library(tracktables)
+
+# data
+load(file="~/project/Gozde_data/ATACseq/R_objs/atacDDS.RData")
+
+dim(atacDDS)
+#[1] 203574     14
+
+# get the differentially accessible regions
+APHMinusDMSO_U <- results(atacDDS, c("Group", "AU", "DU"), format = "GRanges")
+length(APHMinusDMSO_U) #203574
+(APHMinusDMSO_U <- APHMinusDMSO_U[order(APHMinusDMSO_U$pvalue)])
+
+APHMinusDMSO_I <- results(atacDDS, c("Group", "AI", "DI"), format = "GRanges")
+(APHMinusDMSO_I <- APHMinusDMSO_I[order(APHMinusDMSO_I$pvalue)])
+
+AUvsDI <-results(atacDDS, c("Group", "AU", "DI"), format = "GRanges")
+
+AIvsDU <-results(atacDDS, c("Group", "AI", "DU"), format = "GRanges")
+
+#save
+save(APHMinusDMSO_U, file="~/project/Gozde_data/ATACseq/R_objs/APHMinusDMSO_U.RData")
+save(APHMinusDMSO_I, file="~/project/Gozde_data/ATACseq/R_objs/APHMinusDMSO_I.RData")
+save(AUvsDI, file="~/project/Gozde_data/ATACseq/R_objs/AUvsDI.RData")
+save(AIvsDU, file="~/project/Gozde_data/ATACseq/R_objs/AIvsDU.RData")
+
+# check the number significantly accessible regions
+length(APHMinusDMSO_U[(!is.na(APHMinusDMSO_U$padj) & 
+    APHMinusDMSO_U$padj < 0.05) & APHMinusDMSO_U$log2FoldChange > 0 ,]) # 21234
+length(APHMinusDMSO_I[(!is.na(APHMinusDMSO_I$padj) & 
+    APHMinusDMSO_I$padj < 0.05)  & APHMinusDMSO_U$log2FoldChange > 0 ,]) #16131
+length(AUvsDI[(!is.na(AUvsDI$padj) & AUvsDI$padj < 0.05) & AUvsDI$log2FoldChange > 0 ,]) #[1] 17586
+length(AIvsDU[(!is.na(AIvsDU$padj) & AIvsDU$padj < 0.05) & AIvsDU$log2FoldChange > 0 ,]) #[1] 23286
+
+# check the number significantly closed regions
+length(APHMinusDMSO_U[(!is.na(APHMinusDMSO_U$padj) & 
+                         APHMinusDMSO_U$padj < 0.05) & APHMinusDMSO_U$log2FoldChange < 0 ,]) # 30165
+length(APHMinusDMSO_I[(!is.na(APHMinusDMSO_I$padj) & 
+                         APHMinusDMSO_I$padj < 0.05) & APHMinusDMSO_I$log2FoldChange < 0 ,]) #20057
+length(AUvsDI[(!is.na(AUvsDI$padj) & AUvsDI$padj < 0.05) & AUvsDI$log2FoldChange < 0,]) #[1] 24059
+length(AIvsDU[(!is.na(AIvsDU$padj) & AIvsDU$padj < 0.05) & AIvsDU$log2FoldChange < 0,]) #[1] 26276
+
+```
+
+- We can subset and check the regions within promoters using tracktables package.
+
+```{r}
+# packages
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(tracktables)
+
+# load the data
+load("~/project/Gozde_data/ATACseq/R_objs/atacDDS.RData")
+
+# look only at the promoter regions
+toOverLap <- promoters(TxDb.Hsapiens.UCSC.hg38.knownGene, 1000, 5000)
+APHMinusDMSO_U <- APHMinusDMSO_U[(!is.na(APHMinusDMSO_U$padj) & 
+    APHMinusDMSO_U$padj < 0.05) & APHMinusDMSO_U %over% toOverLap,]
+APHMinusDMSO_I <- APHMinusDMSO_I[(!is.na(APHMinusDMSO_I$padj) & 
+    APHMinusDMSO_I$padj < 0.05) & APHMinusDMSO_I %over% toOverLap,]
+makebedtable(APHMinusDMSO_U, "APHMinusDMSO_U.html", "~/project/Gozde_data/ATACseq/R_objs")
+makebedtable(APHMinusDMSO_I, "APHMinusDMSO_I.html", "~/project/Gozde_data/ATACseq/R_objs")
+
+# look at all the regions regardless of their distance from known genes
+APHMinusDMSO_U <- APHMinusDMSO_U[(!is.na(APHMinusDMSO_U$padj) & 
+    APHMinusDMSO_U$padj < 0.05) ,]
+APHMinusDMSO_I <- APHMinusDMSO_I[(!is.na(APHMinusDMSO_I$padj) & 
+    APHMinusDMSO_I$padj < 0.05) ,]
+makebedtable(APHMinusDMSO_U, "APHMinusDMSO_U.html", "~/project/Gozde_data/ATACseq/R_objs")
+makebedtable(APHMinusDMSO_I, "APHMinusDMSO_I.html", "~/project/Gozde_data/ATACseq/R_objs")
+
+# get the previous enhancer-promoter GRO-seq list (Banerjee and Kim et al. 2014 Nucleic Acids Research) as a csv file
+enh <- read.csv("~/project/Gozde_data/ATACseq/peaks/enhancer-promoter_pairs.csv",  header = T)
+
+# convert csv to bed file
+enh_list <- (strsplit(enh$Enhancer_coord_hg19, split=" "))
+enh_bed <- cbind(enh$Enhancer_coord_hg19, enh$Start, enh$End)
+
+
+# do a liftover from hg19 to hg38
+library(rtracklayer)
+chain = import.chain("~/project/Gozde_data/ATACseq/peaks/hg19ToHg38.over.chain")
+# convert data matirx to dataframe
+enh_bed <- as.data.frame(enh_bed)
+colnames(enh_bed) <- c("Chr", "Start", "End")
+hg38_enh <- liftOver(makeGRangesFromDataFrame(enh_bed), chain)
+#save
+write.table(enh_bed, file="~/project/Gozde_data/ATACseq/peaks/enhancer-promoter_pairs_hg38_liftedFromhg19_previous_data.bed", col.names = F, quote=F, row.names = F)
+```
+
+# Annotation for differential ATAC-seq
+
+- Perform peak annotation to determine the regulatory regions
+- Perform gene ontology enrichments.
+
+```{r}
+library(clusterProfiler)
+library(ChIPseeker)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+
+#load data
+load("~/project/Gozde_data/ATACseq/R_objs/APHMinusDMSO_U.RData")
+
+# get the significantly open ones
+open_sig <- APHMinusDMSO_U[APHMinusDMSO_U$padj < 0.05 &                      APHMinusDMSO_U$log2FoldChange>0,]
+
+anno_APHMinusDMSO_U_open <- annotatePeak(open_sig, TxDb = TxDb.Hsapiens.UCSC.hg38.knownGene)
+anno_APHMinusDMSO_U_open
+
+# plot
+pdf("~/project/Gozde_data/ATACseq/files/Pie_chart_func_ele_anno_APHMinusDMSO_U_sig_open_DARs.pdf")
+plotAnnoPie(anno_APHMinusDMSO_U_open)
+dev.off()
+
+# get the significantly closed ones
+closed_sig <- APHMinusDMSO_U[APHMinusDMSO_U$padj < 0.05 &                      APHMinusDMSO_U$log2FoldChange < 0,]
+
+anno_APHMinusDMSO_U_closed <- annotatePeak(closed_sig, TxDb = TxDb.Hsapiens.UCSC.hg38.knownGene)
+anno_APHMinusDMSO_U_closed
+
+# plot
+pdf("~/project/Gozde_data/ATACseq/files/Pie_chart_func_ele_anno_APHMinusDMSO_U_sig_closed_DARs.pdf")
+plotAnnoPie(anno_APHMinusDMSO_U_closed)
+dev.off()
+
+
+# AIvsDI
+load("~/project/Gozde_data/ATACseq/R_objs/APHMinusDMSO_I.RData")
+
+# get the significantly open ones
+open_sig <- APHMinusDMSO_I[APHMinusDMSO_I$padj < 0.05 &                      APHMinusDMSO_I$log2FoldChange>0,]
+
+anno_APHMinusDMSO_I_open <- annotatePeak(open_sig, TxDb = TxDb.Hsapiens.UCSC.hg38.knownGene)
+anno_APHMinusDMSO_I_open
+
+# plot
+pdf("~/project/Gozde_data/ATACseq/files/Pie_chart_func_ele_anno_APHMinusDMSO_I_sig_open_DARs.pdf")
+plotAnnoPie(anno_APHMinusDMSO_I_open)
+dev.off()
+
+# get the significantly closed ones
+closed_sig <- APHMinusDMSO_I[APHMinusDMSO_I$padj < 0.05 &                      APHMinusDMSO_I$log2FoldChange < 0,]
+
+anno_APHMinusDMSO_I_closed <- annotatePeak(closed_sig, TxDb = TxDb.Hsapiens.UCSC.hg38.knownGene)
+anno_APHMinusDMSO_I_closed
+
+# plot
+pdf("~/project/Gozde_data/ATACseq/files/Pie_chart_func_ele_anno_APHMinusDMSO_I_sig_closed_DARs.pdf")
+plotAnnoPie(anno_APHMinusDMSO_I_closed)
+dev.off()
+
+# AUvsDI
+anno_AUvsDI <- annotatePeak(AUvsDI, TxDb = TxDb.Hsapiens.UCSC.hg38.knownGene)
+anno_AUvsDI
+
+# plot
+pdf("~/project/Gozde_data/ATACseq/files/Pie_chart_func_ele_anno_AUvsDI_DARs.pdf")
+plotAnnoPie(anno_AUvsDI)
+dev.off()
+
+# we need a proper gene background to perform GO term enrichments in significant DARs
+# So, get the annotation for all the regions in the data
+# load
+consensus_peaks_filt <- read.table(file="~/project/Gozde_data/ATACseq/peaks/consensus_peaks_filt.bed")
+nrow(consensus_peaks_filt) #[1] 203574
+
+# convert consensus_peaks_filt dataframe to GRanges object
+colnames(consensus_peaks_filt) <- c("Chr", "Start", "End", "Width", "Strand")
+consensus_peaks_filt_GR <- makeGRangesFromDataFrame(consensus_peaks_filt)
+
+# annotate consensus peaks
+anno_consensus_peaks_filt <- annotatePeak(consensus_peaks_filt_GR, TxDb = TxDb.Hsapiens.UCSC.hg38.knownGene)
+anno_consensus_peaks_filt
+#Annotated peaks generated by ChIPseeker
+#203574/203574  peaks were annotated
+#Genomic Annotation Summary:
+#              Feature  Frequency
+#9    Promoter (<=1kb) 17.0557144
+#10   Promoter (1-2kb)  4.5433110
+#11   Promoter (2-3kb)  3.7377072
+#4              5' UTR  0.3364870
+#3              3' UTR  2.3067779
+#1            1st Exon  1.6279093
+#7          Other Exon  3.5004470
+#2          1st Intron 12.5787183
+#8        Other Intron 24.9629127
+#6  Downstream (<=300)  0.1237879
+#5   Distal Intergenic 29.2262273
+
+# AUvsDU
+go1 <- enrichGO(as.data.frame(as.GRanges(anno_APHMinusDMSO_U)[as.GRanges(anno_APHMinusDMSO_U)$log2FoldChange > 
+    0])$geneId, OrgDb = "org.Hs.eg.db", ont = "BP", maxGSSize = 5000, readable = T, universe = as.data.frame(as.GRanges(anno_consensus_peaks_filt))$geneId)
+    
+go2 <- enrichGO(as.data.frame(as.GRanges(anno_APHMinusDMSO_U)[as.GRanges(anno_APHMinusDMSO_U)$log2FoldChange < 
+    0])$geneId, OrgDb = "org.Hs.eg.db", ont = "BP", maxGSSize = 5000, readable = T, universe = as.data.frame(as.GRanges(anno_consensus_peaks_filt))$geneId)
+
+#AIvsDI
+go3 <- enrichGO(as.data.frame(as.GRanges(anno_APHMinusDMSO_I)[as.GRanges(anno_APHMinusDMSO_I)$log2FoldChange > 
+    0])$geneId, OrgDb = "org.Hs.eg.db", ont = "BP", maxGSSize = 5000, readable = T, universe = as.data.frame(as.GRanges(anno_consensus_peaks_filt))$geneId)
+  
+go4<- enrichGO(as.data.frame(as.GRanges(anno_APHMinusDMSO_I)[as.GRanges(anno_APHMinusDMSO_I)$log2FoldChange < 
+    0])$geneId, OrgDb = "org.Hs.eg.db", ont = "BP", maxGSSize = 5000, readable = T, universe = as.data.frame(as.GRanges(anno_consensus_peaks_filt))$geneId)
+
+library(DT)
+# top 50 enriched GO terms among the regions which are differentially open in APH than DMSO samples
+head(go1, 50) %>% dplyr::select(ID, Description, pvalue, p.adjust) %>% datatable(elementId = "goEle1") 
+
+# top 50 enriched GO terms among the regions which are differentially closed in APH than DMSO samples
+head(go2, 50) %>% dplyr::select(ID, Description, pvalue, p.adjust) %>% datatable(elementId = "goEle2")
+
+# AIvsDI
+# top 50 enriched GO terms among the regions which are differentially closed in APH than DMSO samples
+head(go3, 50) %>% dplyr::select(ID, Description, pvalue, p.adjust) %>% datatable(elementId = "goEle3")
+head(go4, 50) %>% dplyr::select(ID, Description, pvalue, p.adjust) %>% datatable(elementId = "goEle4")
+
+#write
+data.frame(go1) %>%  write.table(file="~/project/Gozde_data/ATACseq/files/AUvsDU_open.csv", sep=",", quote=F)
+data.frame(go2) %>%  write.table(file="~/project/Gozde_data/ATACseq/files/AUvsDU_closed.csv", sep=",", quote=F)
+# AIvsDI
+data.frame(go3) %>%  write.table(file="~/project/Gozde_data/ATACseq/files/AIvsDI_open.csv", sep=",", quote=F)
+data.frame(go4) %>%  write.table(file="~/project/Gozde_data/ATACseq/files/AIvsDI_closed.csv", sep=",", quote=F)
+```
+
+# Motif Enrichment Analysis
+
+```{r}
+#BiocManager::install("motifmatchr")
+library(GenomicRanges)
+library(DESeq2)
+library(rtracklayer)
+#BiocManager::install("JASPAR2020")
+library(JASPAR2020)
+library(motifmatchr)
+
+# get PWM for human TFs
+library(TFBSTools)
+opts <- list()
+opts[["species"]] <- 9606
+#opts[["type"]] <- "SELEX"
+opts[["all_versions"]] <- TRUE
+PFMatrixList <- getMatrixSet(JASPAR2020, opts)
+
+
+# get all the peaks to determine the background
+consensus_peaks <- import.bed("~/project/Gozde_data/ATACseq/peaks/consensus_peaks.bed")
+
+# redo the DESeq2 with conventional chr names
+# remove non-conventional chromosome names from peak object
+consensus_peaks_filt <- keepSeqlevels(consensus_peaks, standardChromosomes(consensus_peaks)[1:23], pruning.mode = "coarse")
+seqlevels(consensus_peaks_filt)
+
+# convert consensus_peaks_filt dataframe to GRanges object
+colnames(consensus_peaks_filt) <- c("Chr", "Start", "End", "Width", "Strand")
+consensus_peaks_filt_GR <- makeGRangesFromDataFrame(consensus_peaks_filt)
+
+# do DESeq2
+metaData <- data.frame(Group, row.names = colnames(myCounts))
+atacDDS <- DESeqDataSetFromMatrix(myCounts, metaData, ~Group, rowRanges = consensus_peaks_filt_GR)
+atacDDS <- DESeq(atacDDS)
+atac_Rlog <- rlog(atacDDS)
+
+# save
+save(atacDDS, file="~/project/Gozde_data/ATACseq/R_objs/atacDDS.RData")
+# load DESeq2 data
+load("~/project/Gozde_data/ATACseq/R_objs/atacDDS.RData")
+
+# load counts data
+fcResults <- readRDS("~/project/Gozde_data/ATACseq/R_objs/fcResults.rds")
+# save the counts in a new object
+myCounts <- fcResults$counts
+colnames(myCounts) <- c("AI_210","AI_216","AI_220","AI_224","AU_215","AU_219", "AU_223", "AU_27", "DI_214", "DI_217", "DI_222", "DU_213", "DU_221", "DU_23")
+save(myCounts, file="~/project/Gozde_data/ATACseq/R_objs/myCounts.RData")
+
+# load count data
+load("~/project/Gozde_data/ATACseq/R_objs/myCounts.RData")
+
+Group <- factor(c("AI","AI","AI","AI","AU","AU", "AU", "AU","DI", "DI", "DI", "DU","DU", "DU"))
+
+# get differentially accessible regions
+APHMinusDMSO_U <- results(atacDDS, c("Group", "AU", "DU"), format = "GRanges")
+(APHMinusDMSO_U <- APHMinusDMSO_U[order(APHMinusDMSO_U$pvalue)])
+# get only the significantly DAR
+APHMinusDMSO_U <- APHMinusDMSO_U[(!is.na(APHMinusDMSO_U$padj) & 
+    APHMinusDMSO_U$padj < 0.05) ,]
+APHMinusDMSO_U_open <- APHMinusDMSO_U[(APHMinusDMSO_U$log2FoldChange > 0) ,]
+APHMinusDMSO_U_closed <- APHMinusDMSO_U[(APHMinusDMSO_U$log2FoldChange < 0) ,]
+  
+# get differentially accessible regions
+APHMinusDMSO_I <- results(atacDDS, c("Group", "AI", "DI"), format = "GRanges")
+(APHMinusDMSO_I <- APHMinusDMSO_I[order(APHMinusDMSO_I$pvalue)])
+# get only the significantly DAR
+APHMinusDMSO_I <- APHMinusDMSO_I[(!is.na(APHMinusDMSO_I$padj) & 
+    APHMinusDMSO_I$padj < 0.05) ,]
+APHMinusDMSO_I_open <- APHMinusDMSO_I[(APHMinusDMSO_I$log2FoldChange > 0) ,]
+APHMinusDMSO_I_closed <- APHMinusDMSO_I[(APHMinusDMSO_I$log2FoldChange < 0) ,]
+
+# save results
+library(tracktables)
+makebedtable(APHMinusDMSO_U, "APHMinusDMSO_U.html", "~/project/Gozde_data/ATACseq/R_objs/")
+makebedtable(APHMinusDMSO_I, "APHMinusDMSO_I.html", "~/project/Gozde_data/ATACseq/R_objs/")
+
+# perform motif analysis for the consensus peaks
+motif_ix_peaks <- matchMotifs(PFMatrixList, consensus_peaks_filt_GR, genome = "hg38")
+motif_ix_peaks
+# save
+save(motif_ix_peaks, file="~/project/Gozde_data/ATACseq/R_objs/motif_ix_peaks.RData")
+
+# load consensus peak motif analysis
+load("~/project/Gozde_data/ATACseq/R_objs/motif_ix_peaks.RData")
+
+# perform motif analysis for the enhancers from our previous paper
+# read enhancers
+enh <- read.table("~/project/Gozde_data/ATACseq/peaks/enhancer-promoter_pairs_hg38_liftedFromhg19_previous_data.bed")
+# convert dataframe to GRanges object
+colnames(enh) <- c("Chr", "Start", "End")
+enh_GR <- makeGRangesFromDataFrame(enh)
+# find the motifs within these enhancer regions
+motif_ix_enh<- matchMotifs(PFMatrixList, enh_GR, genome = "hg38") 
+motif_ix_enh
+# save
+save(motif_ix_enh, file="~/project/Gozde_data/ATACseq/R_objs/motif_ix_enh.RData")
+# load
+load(file="~/project/Gozde_data/ATACseq/R_objs/motif_ix_enh.RData")
+motif_pos <- matchMotifs(PFMatrixList, enh_GR, genome = "hg38", 
+                          out = "positions") 
+print(motif_pos)
+motif_ix_scores <- matchMotifs(example_motifs, peaks, 
+                                genome = "hg38", out = "scores")
+print(motif_ix_scores)
+
+# perform logistic regression to find the motifs in DARs compared to the consensus peaks
+# create all a dataframe with all the relevant info
+# take only the open regions in APH compared to DMSO
+# add a column for differentially open status (0 for not differential 1 for differential)
+# add a column for peak length
+# change the rownames as peak IDs (chr:Start-End)
+# loop through each motif to perform logistic regression with motif as response, peak group (differentiality) and peak length as covariates
+
+# create peakID column in consensus peak dataframe
+consensus_peaks_filt$peak_ID <- paste0(consensus_peaks_filt$Chr, ":", consensus_peaks_filt$Start, "-", consensus_peaks_filt$End)
+
+# create a vector. Assign one (1) if a peak in consensus peak dataframe is a differentially accessible (open or closed) peak in APHvsDMSO_Uninfected comparison, assign 0 otherwise
+differentiality_U <- ifelse(consensus_peaks_filt$peak_ID %in% names(APHMinusDMSO_U_open), "AUvsDU_open", "NotSignif")
+differentiality_U = factor(differentiality_U, levels = c('NotSignif', 'AUvsDU_open'))
+
+differentiality_I <- ifelse(consensus_peaks_filt$peak_ID %in% names(APHMinusDMSO_I_open), "AIvsDI_open", "NotSignif")
+differentiality_I = factor(differentiality_I, levels = c('NotSignif', 'AIvsDI_open'))
+
+# check if it worked
+length(names(APHMinusDMSO_U))
+#[1] 51399
+length(consensus_peaks_filt$peak_ID)
+#[1] 203574
+length(differentiality_U)
+#[1] 203574
+table(differentiality_U)
+#differentiality_U
+#  NotSignif AUvsDU_open 
+#     182340       21234 
+length(names(APHMinusDMSO_I))
+#[1] 38050
+length(consensus_peaks_filt$peak_ID)
+#[1] 203574
+length(differentiality_I)
+#[1] 203574
+table(differentiality_I)
+#differentiality_I
+#  NotSignif AIvsDI_open 
+#     185581       17993 
+
+# convert sparse matrix (lgCMatrix) into a dataframe
+# check out the sparse matrix
+str(motif_ix_peaks@assays@data$motifMatches)
+" Formal class 'lgCMatrix' [package "Matrix"] with 6 slots
+  ..@ i       : int [1:13447163] 11 14 22 24 41 61 72 128 131 249 ...
+  ..@ p       : int [1:811] 0 16877 36722 59272 63200 64514 71449 77492 90041 103224 ...
+  ..@ Dim     : int [1:2] 203574 810
+  ..@ Dimnames:List of 2
+  .. ..$ : NULL
+  .. ..$ : NULL
+  ..@ x       : logi [1:13447163] TRUE TRUE TRUE TRUE TRUE TRUE ...
+  ..@ factors : list()
+"
+# give dimnames to sparse matrix
+motif_ix_peaks@assays@data$motifMatches@Dimnames <- list(Peak_ID=consensus_peaks_filt$peak_ID, Motif_name=rownames(motif_ix_peaks@colData))
+#check
+str(motif_ix_peaks@assays@data$motifMatches)
+"Formal class 'lgCMatrix' [package "Matrix"] with 6 slots
+  ..@ i       : int [1:13447163] 11 14 22 24 41 61 72 128 131 249 ...
+  ..@ p       : int [1:811] 0 16877 36722 59272 63200 64514 71449 77492 90041 103224 ...
+  ..@ Dim     : int [1:2] 203574 810
+  ..@ Dimnames:List of 2
+  .. ..$ Peak_ID   : chr [1:203574] "chr1:10051-10452" "chr1:17383-17600" "chr1:180713-181230" "chr1:181311-181617" ...
+  .. ..$ Motif_name: chr [1:810] "MA0002.1" "MA0003.1" "MA0017.1" "MA0018.1" ...
+  ..@ x       : logi [1:13447163] TRUE TRUE TRUE TRUE TRUE TRUE ...
+  ..@ factors : list()
+"
+
+summ <- summary(motif_ix_peaks@assays@data$motifMatches)
+head(summ)
+#203574 x 810 sparse Matrix of class "lgCMatrix", with 13447163 entries 
+"   i j    x
+1 12 1 TRUE
+2 15 1 TRUE
+3 23 1 TRUE
+4 25 1 TRUE
+5 42 1 TRUE
+6 62 1 TRUE
+"
+
+t <- data.frame(peak_ID = rownames(motif_ix_peaks@assays@data$motifMatches)[summ$i], 
+		motif_name = colnames(motif_ix_peaks@assays@data$motifMatches)[summ$j], weight= summ$x)
+
+head(t)
+'               peak_ID motif_name weight
+1   chr1:838289-838642   MA0002.1   TRUE
+2   chr1:856158-856859   MA0002.1   TRUE
+3   chr1:885975-886683   MA0002.1   TRUE
+4   chr1:898404-898949   MA0002.1   TRUE
+5   chr1:995801-996169   MA0002.1   TRUE
+6 chr1:1069107-1070719   MA0002.1   TRUE
+table(t$motif_name)
+'
+dim(t)
+#[1] 13447163        3
+
+# load data
+load("~/project/Gozde_data/ATACseq/R_objs/motif_ix_peaks.RData")
+
+# we need to create a vector where elements will be the number of occurence of a given motif in a peak_ID
+library(dplyr)
+t_new <- aggregate(t$weight, list(t$peak_ID), sum)
+head(t_new)
+'                    Group.1   x
+1 chr1:100006202-100006711  41
+2 chr1:100028188-100029343  97
+3 chr1:100037755-100039264 145
+4 chr1:100046689-100047221  91
+5 chr1:100063366-100064523 109
+6 chr1:100075429-100076165 150
+'
+df_U=c()
+df_I=c()
+for (i in 1:length(rownames(motif_ix_peaks@colData))) {
+	m <- data.frame(cbind(Motif_occurence = motif_ix_peaks@assays@data$motifMatches[,i]), Differentiality = differentiality_U, Peak_length = consensus_peaks_filt$Width)
+	rownames(m) <- consensus_peaks_filt$peak_ID
+	p <- data.frame(cbind(Motif_occurence = motif_ix_peaks@assays@data$motifMatches[,i]), Differentiality = differentiality_I, Peak_length = consensus_peaks_filt$Width)
+	rownames(p) <- consensus_peaks_filt$peak_ID
+	#colnames(m) <- c("peak_ID", "Motif_occurence", "Differentiality, "Peak_length")
+	
+	# AUvsDU
+	model_U <- glm(Motif_occurence ~ Differentiality + Peak_length, data=m) %>% summary
+	df_U <- data.frame(rbind(df_U, cbind(MotifID= motif_ix_peaks@assays@data@listData$motifMatches@Dimnames$Motif_name[i], Coef= coef(model_U)[2,1], p_val= coef(model_U)[2,4], log2FC= log2(exp(coef(model_U)[2,1])))))
+
+	# AIvsDI
+	model_I <- glm(Motif_occurence ~ Differentiality + Peak_length, data=p) %>% summary
+	df_I <- data.frame(rbind(df_I, cbind(MotifID= motif_ix_peaks@assays@data@listData$motifMatches@Dimnames$Motif_name[i], Coef= coef(model_I)[2,1], p_val= coef(model_I)[2,4], log2FC= log2(exp(coef(model_I)[2,1])))))
+}
+
+# adjust p values with Benjamini-Hochberg method
+df_U$p_adj <- p.adjust(df_U$p_val, method = "BH", n = length(df_U$p_val))
+df_I$p_adj <- p.adjust(df_I$p_val, method = "BH", n = length(df_I$p_val))
+# save
+save(df_U, file="~/project/Gozde_data/ATACseq/R_objs/df_U.RData")
+save(df_I, file="~/project/Gozde_data/ATACseq/R_objs/df_I.RData")
+
+# load 
+load("~/project/Gozde_data/ATACseq/R_objs/df_U.RData")
+head(df_U)
+'   MotifID                  Coef                 p_val
+1 MA0002.1    0.0468140402343816 4.70914426996508e-122
+2 MA0003.1   -0.0207030545087581  4.11715289946985e-24
+3 MA0017.1  -0.00601748100497205    0.0073351946407182
+4 MA0018.1  0.000758610851589587      0.44309178886821
+5 MA0024.1 -0.000806354581204807     0.162850541807868
+6 MA0025.1    0.0203180765754698  6.01467713252347e-54
+                log2FC         p_adj
+1   0.0675383836901186 4.828363e-121
+2  -0.0298681940710392  9.722723e-24
+3 -0.00868139000451676  8.828392e-03
+4  0.00109444411355285  4.661095e-01
+5 -0.00116332375550227  1.792241e-01
+6   0.0293127883158326  2.721725e-53 '
+# check how many motifs have fold change >= given fold compared to the background
+(df_U[abs(as.numeric(df_U$log2FC)) >= 0.2 ,])
+'     MotifID              Coef p_val            log2FC p_adj
+79  MA0099.2 0.150683127552602     0 0.217389800865778     0
+101 MA0489.1 0.140105382925748     0 0.202129341148826     0
+136 MA0050.2   0.1388306090743     0 0.200290231235087     0
+139 MA0105.3  0.13970036869462     0 0.201545029126089     0
+662 MA0462.2  0.15276588726134     0 0.220394587968937     0
+706 MA1634.1 0.152207344145031     0 0.219588780584916     0
+732 MA0835.2 0.153913242262884     0 0.222049871339805     0
+762 MA0490.2 0.139069053783122     0 0.200634234234031     0'
+dim(df_U[abs(as.numeric(df_U$log2FC)) >= 0.2 ,])
+# [1] 8 5
+# check the significant ones based on p_adj
+dim(df_U[df_U$p_adj <= 0.05,])
+#[1] 700   5
+load("~/project/Gozde_data/ATACseq/R_objs/df_I.RData")
+head(df_I)
+'   MotifID                  Coef                 p_val
+1 MA0002.1    0.0478079545751924 5.81788012195045e-110
+2 MA0003.1    -0.030182295624442    8.312234486177e-43
+3 MA0017.1   0.00263884763283829     0.274869193889815
+4 MA0018.1 -0.000605997238362646     0.569370196691738
+5 MA0024.1  -0.00263639394454995   2.2614628429852e-05
+6 MA0025.1    0.0217551565563034  2.32926610777985e-53
+                log2FC         p_adj
+1   0.0689722989806749 4.858230e-109
+2  -0.0435438482200272  2.966040e-42
+3  0.00380705239355733  2.952839e-01
+4 -0.00087426921057824  5.875030e-01
+5 -0.00380351246963193  2.950213e-05
+6   0.0313860564775417  1.003567e-52'
+# check how many motifs have fold change >=  given fold compared to the background
+(df_I[abs(as.numeric(df_I$log2FC)) >= 0.2 ,])
+'     MotifID              Coef p_val            log2FC p_adj
+50  MA0107.1 0.147187567849895     0 0.212346774217552     0
+79  MA0099.2 0.147422893709888     0 0.212686277668756     0
+136 MA0050.2 0.170672876335775     0 0.246228912303878     0
+139 MA0105.3 0.171143142258821     0 0.246907362618955     0
+662 MA0462.2  0.14809136587942     0 0.213650679152712     0
+706 MA1634.1 0.147407309670957     0 0.212663794653073     0
+732 MA0835.2 0.148765860145251     0 0.214623768685135     0
+'
+# find the significant motifs
+dim(df_I[df_I$p_adj <= 0.05,])
+#[1] 716   5
+#  most of the motifs are significant, this could be due to the fact that we have many motifs. We cannot use the p value as a reliable metric to determine which motifs are enriched in the comparison compared to the consensus peaks
+```
+
+- Perform annotation of DARs with rGREAT.
+
+```{r}
+# packages
+library(rGREAT)
+# load data
+load("~/project/Gozde_data/ATACseq/R_objs/APHMinusDMSO_U.RData")
+load("~/project/Gozde_data/ATACseq/R_objs/APHMinusDMSO_I.RData")
+load("./AUvsDI.RData")
+load("./AIvsDU.RData")
+
+##### AUvsDU ##########
+# convert each object to dataframe
+# create unique peak ID
+uni <- paste0(APHMinusDMSO_U[,1])
+# check 
+head(uni)
+
+
+## add unique IDs for each peak
+a <- as.data.frame(APHMinusDMSO_U[,0:6])
+a$unique_name <- uni
+head(a)
+
+# save DARs in tables
+write.table(a[APHMinusDMSO_U$log2FoldChange>0 & APHMinusDMSO_U$padj < 0.05 ,], file="~/project/Gozde_data/ATACseq/peaks/APHMinusDMSO_U_open.bed", quote=F, row.names = F, sep="\t")
+
+write.table(a[APHMinusDMSO_U$log2FoldChange<0 & APHMinusDMSO_U$padj < 0.05,], file="~/project/Gozde_data/ATACseq/peaks/APHMinusDMSO_U_closed.bed", quote=F, row.names = F, sep="\t")
+
+##### AIvsDI ##########
+# convert each object to dataframe
+# create unique peak ID
+uni <- paste0(APHMinusDMSO_I[,1])
+# check 
+head(uni)
+
+
+## add unique IDs for each peak
+a <- as.data.frame(APHMinusDMSO_I[,0:6])
+a$unique_name <- uni
+head(a)
+
+# save DARs in tables
+write.table(a[APHMinusDMSO_I$log2FoldChange>0 & APHMinusDMSO_I$padj < 0.05, ], file="~/project/Gozde_data/ATACseq/peaks/APHMinusDMSO_I_open.bed", quote=F, row.names = F, sep="\t")
+
+write.table(a[APHMinusDMSO_I$log2FoldChange<0 & APHMinusDMSO_I$padj < 0.05, ], file="~/project/Gozde_data/ATACseq/peaks/APHMinusDMSO_I_closed.bed", quote=F, row.names = F, sep="\t")
+
+
+##### AUvsDI ##########
+# convert each object to dataframe
+## add the log2FCs, p vals, etc. in the dataframe
+# Add unique peak ID
+
+# create unique peak ID
+uni <- paste0(AUvsDI[,1])
+# check 
+head(uni)
+#[1] "chr1:10051-10452"   "chr1:17383-17600"   "chr1:180713-181230"
+#[4] "chr1:181311-181617" "chr1:191288-191649" "chr1:629827-630016"
+
+## add unique IDs for each peak
+a <- as.data.frame(AUvsDI[,0:6])
+a$unique_name <- uni
+head(a)
+
+# save DARs in tables
+write.table(a[AUvsDI$log2FoldChange>0 & AUvsDI$padj < 0.05, ], file="~/project/Gozde_data/ATACseq/peaks/AUvsDI_open.bed", quote=F, row.names = F, sep="\t")
+
+write.table(a[AUvsDI$log2FoldChange<0 & AUvsDI$padj < 0.05, ], file="~/project/Gozde_data/ATACseq/peaks/AUvsDI_closed.bed", quote=F, row.names = F, sep="\t")
+
+##### AIvsDU ##########
+# convert each object to dataframe
+## add the log2FCs, p vals, etc. in the dataframe
+# Add unique peak ID
+
+# create unique peak ID
+uni <- paste0(AIvsDU[,1])
+# check 
+head(uni)
+#[1] "chr1:10051-10452"   "chr1:17383-17600"   "chr1:180713-181230"
+#[4] "chr1:181311-181617" "chr1:191288-191649" "chr1:629827-630016"
+
+## add unique IDs for each peak
+a <- as.data.frame(AIvsDU[,0:6])
+a$unique_name <- uni
+head(a)
+
+# save DARs in tables
+write.table(a[AIvsDU$log2FoldChange>0 & AIvsDU$padj < 0.05, ], file="~/project/Gozde_data/ATACseq/peaks/AIvsDU_open.bed", quote=F, row.names = F, sep="\t")
+
+write.table(a[AIvsDU$log2FoldChange<0 & AIvsDU$padj < 0.05, ], file="~/project/Gozde_data/ATACseq/peaks/AIvsDU_closed.bed", quote=F, row.names = F, sep="\t")
+
+
+
+# make possible enhancer bed files HOMER ready
+enh_bed <- read.table("~/project/Gozde_data/ATACseq/files/regions_of_interest/possible_enhancers_near_IFNs.bed")
+head(enh_bed)
+enh_bed$V4 <- paste0(enh_bed$V1, ":", enh_bed$V2, "-", enh_bed$V3) 
+enh_bed$V5 <- rep("*", times=nrow(enh_bed))  
+enh_bed$V6 <- rep("+", times=nrow(enh_bed))  
+
+# write
+write.table(enh_bed, "~/project/Gozde_data/ATACseq/files/regions_of_interest/possible_enhancers_near_IFNs.bed", quote = F, col.names = F, row.names = F)
+
+# read
+#a <- read.table(file="~/project/Gozde_data/ATACseq/peaks/APHMinusDMSO_U_open.bed")
+
+length(APHMinusDMSO_U[APHMinusDMSO_U$log2FoldChange>0,]) #104306
+length(APHMinusDMSO_U[APHMinusDMSO_U$log2FoldChange>0 & APHMinusDMSO_U$padj < 0.05 ,]) #21234
+# read the bed file (all peaks)
+consensus_peaks_filt <- read.table(file="~/project/Gozde_data/ATACseq/peaks/consensus_peaks_filt.bed")
+
+# add unique peak ID
+uni <- paste0(consensus_peaks_filt[,1], ":", consensus_peaks_filt[,2], "-", consensus_peaks_filt[,3])
+# check 
+head(uni)
+#[1] "chr1:10051-10452"   "chr1:17383-17600"   "chr1:180713-181230"
+#[4] "chr1:181311-181617" "chr1:191288-191649" "chr1:629827-630016"
+
+a <- as.data.frame(consensus_peaks_filt)
+a[,6] <- a[,5]
+a[,5] <- a[,4]
+a[,4] <- uni
+head(a)
+
+# write
+write.table(a, file="~/project/Gozde_data/ATACseq/peaks/consensus_peaks_filt.bed", col.names = F, quote=F, row.names = F, sep="\t")
+
+# annotation of significant DARs with GREAT
+job_1 = submitGreatJob(APHMinusDMSO_U[APHMinusDMSO_U$log2FoldChange>0 & APHMinusDMSO_U$padj < 0.05 ,], species = "hg38", bg = consensus_peaks_filt[,1:3])
+#availableCategories(job_1)
+#[1] "GO"        "Phenotype" "Genes" 
+
+# write
+great_GOTable_1 = getEnrichmentTables(job_1, category = "GO")
+great_genes_1 = getEnrichmentTables(job_1, category = "Genes")
+
+write.table(great_genes_1$`Ensembl Genes`, file="~/project/Gozde_data/ATACseq/files/APHMinusDMSO_open_GREAT_genes.txt", sep="\t", quote = F, row.names = F, col.names = T)
+write.table(great_GOTable_1$`GO Molecular Function`, file="~/project/Gozde_data/ATACseq/files/APHMinusDMSO_open_GREAT_GO_MolFunc.txt", sep="\t", quote = F, row.names = F, col.names = T)
+write.table(great_GOTable_1$`GO Biological Process`, file="~/project/Gozde_data/ATACseq/files/APHMinusDMSO_open_GREAT_GO_BiolProcess.txt", sep="\t", quote = F, row.names = F, col.names = T)
+
+
+#AUvsDU closed
+# annotation with GREAT
+job_2 = submitGreatJob(APHMinusDMSO_U[APHMinusDMSO_U$log2FoldChange<0 & APHMinusDMSO_U$padj < 0.05 ,], species = "hg38", bg = consensus_peaks_filt[,1:3])
+availableCategories(job_2)
+#[1] "GO"        "Phenotype" "Genes" 
+
+# write
+great_GOTable_2 = getEnrichmentTables(job_2, category = "GO")
+great_genes_2 = getEnrichmentTables(job_2, category = "Genes")                                     
+write.table(great_genes_2$`Ensembl Genes`, file="~/project/Gozde_data/ATACseq/files/APHMinusDMSO_closed_GREAT_genes.txt", sep="\t", quote = F, row.names = F, col.names = T)
+write.table(great_GOTable_2$`GO Molecular Function`, file="~/project/Gozde_data/ATACseq/files/APHMinusDMSO_closed_GREAT_GO_MolFunc.txt", sep="\t", quote = F, row.names = F, col.names = T)
+write.table(great_GOTable_2$`GO Biological Process`, file="~/project/Gozde_data/ATACseq/files/APHMinusDMSO_closed_GREAT_GO_BiolProcess.txt", sep="\t", quote = F, row.names = F, col.names = T)
+```
+
+```{r}
+#packages
+library(rGREAT)
+#read data
+open_with_APH_U <- read.table("~/project/Gozde_data/ATACseq/peaks/APHMinusDMSO_U_opened_withAPH.bed")
+
+# read the bed file (all peaks)
+consensus_peaks_filt <- read.table(file="~/project/Gozde_data/ATACseq/peaks/consensus_peaks_filt.bed")
+
+# annotation with GREAT
+job_3 = submitGreatJob(open_with_APH_U, species = "hg38", bg = consensus_peaks_filt[,1:3])
+
+great_GOTable_3 = getEnrichmentTables(job_3, category = "GO")
+                                      
+#write.table(great_genes_3$`Ensembl Genes`, file="~/project/Gozde_data/ATACseq/files/APHMinusDMSO_closed_GREAT_genes.txt", sep="\t", quote = F, row.names = T, col.names = T)
+write.table(great_GOTable_3$`GO Molecular Function`, file="~/project/Gozde_data/ATACseq/files/APHMinusDMSO_opened_with_APH_GREAT_GO_MolFunc.txt", sep="\t", quote = F, row.names = T, col.names = T)
+write.table(great_GOTable_3$`GO Biological Process`, file="~/project/Gozde_data/ATACseq/files/APHMinusDMSO_opened_with_APH_GREAT_GO_BiolProcess.txt", sep="\t", quote = F, row.names = T, col.names = T)
+```
