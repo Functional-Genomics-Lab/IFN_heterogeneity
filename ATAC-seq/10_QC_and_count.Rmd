@@ -1,0 +1,610 @@
+---
+title: "10_ATACseq QC, peak annotation, and count"
+author: "Gozde Buyukkahraman"
+date: "2022-11-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##Aim:
+
+- Peak calling was performed for each filtered bam file using macs2.
+- Each peak bedfile was pooled to a new bedfile by bedtools intersect command. 
+- The idea was to get the common peaks in all the replicates within a sample.
+- Then use various R packages determine QC, annotate, and count the peaks using these common peaks as the background.
+
+```{r}
+## Load packages
+#BiocManager::install("ChIPseeker")
+#BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
+# sudo apt install libgsl-dev in bash before installing ATACseqQC
+#BiocManager::install("ATACseqQC")
+#BiocManager::install("DiffBind")
+#BiocManager::install("Rsamtools")
+#BiocManager::install("Rsamtools")
+#BiocManager::install("profileplyr")
+#BiocManager::install("bedr")
+library('bedr')
+library(profileplyr)
+# load the following package for dba.count function:
+library(parallel)
+# load the following package for dba.counts() error
+library(BiocParallel)
+register(SerialParam(FALSE))
+# load the rest
+library(ATACseqQC)
+library(ChIPseeker)
+library(DiffBind)
+# for shifting the reads
+library(Rsamtools)
+#BiocManager::install("rGREAT")
+library(rGREAT)
+#BiocManager::install("rtracklayer")
+library(rtracklayer)
+#BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+
+#############################################################################################################
+# find only the peaks which are common in all the replicates within a condition
+# read bedtools intersect results for each replicate
+AI_210_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/AI_210_S14_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+AI_216_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/AI_216_S11_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+AI_220_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/AI_220_S12_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+AI_224_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/AI_224_S13_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+
+# the same peak is written multiple times as bedtools finds more matching regions
+# need to get only the unique peaks and compare them with each other
+# create a unique name for a peak
+AI_210_intersect$V7 <- paste0(AI_210_intersect$V1, ":", AI_210_intersect$V2, "-", AI_210_intersect$V3)
+AI_216_intersect$V7 <- paste0(AI_216_intersect$V1, ":", AI_216_intersect$V2, "-", AI_216_intersect$V3)
+AI_220_intersect$V7 <- paste0(AI_220_intersect$V1, ":", AI_220_intersect$V2, "-", AI_220_intersect$V3)
+AI_224_intersect$V7 <- paste0(AI_224_intersect$V1, ":", AI_224_intersect$V2, "-", AI_224_intersect$V3)
+
+# compare all the unique peaks between replicates & get the common ones in a list
+AI_210_uniq <- unique(AI_210_intersect$V7)
+AI_216_uniq <- unique(AI_216_intersect$V7)
+AI_210_216 <- AI_210_uniq[AI_210_uniq %in% AI_216_uniq]
+AI_220_uniq <- unique(AI_220_intersect$V7)
+AI_224_uniq <- unique(AI_224_intersect$V7)
+AI_220_224 <- AI_220_uniq[AI_220_uniq %in% AI_224_uniq]
+AI_common <- AI_210_216[AI_210_216 %in% AI_220_224]
+
+# convert it to bed file
+AI_common_peaks <- data.frame(do.call(rbind,strsplit(AI_common,split = ":|-")))
+colnames(AI_common_peaks) <- c("seqnames", "start", "end")
+options(scipen = 999) # turnoff scientific format
+
+# write the intersected peaks
+write.table(AI_common_peaks, "~/project/Gozde_data/ATACseq/peaks/AI_common_peaks.bed", row.names = F, quote = F, sep="\t")
+
+
+# read bedtools intersect results for each replicate
+AU_215_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/AU_215_S7_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+AU_219_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/AU_219_S8_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+AU_223_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/AU_223_S9_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+AU_27_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/AU_27_S10_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+
+# the same peak is written multiple times as bedtools finds more matching regions
+# need to get only the unique peaks and compare them with each other
+# create a unique name for a peak
+AU_215_intersect$V7 <- paste0(AU_215_intersect$V1, ":", AU_215_intersect$V2, "-", AU_215_intersect$V3)
+AU_219_intersect$V7 <- paste0(AU_219_intersect$V1, ":", AU_219_intersect$V2, "-", AU_219_intersect$V3)
+AU_223_intersect$V7 <- paste0(AU_223_intersect$V1, ":", AU_223_intersect$V2, "-", AU_223_intersect$V3)
+AU_27_intersect$V7 <- paste0(AU_27_intersect$V1, ":", AU_27_intersect$V2, "-", AU_27_intersect$V3)
+
+# compare all the unique peaks between replicates & get the common ones in a list
+AU_215_uniq <- unique(AU_215_intersect$V7)
+AU_219_uniq <- unique(AU_219_intersect$V7)
+AU_215_219 <- AU_215_uniq[AU_215_uniq %in% AU_219_uniq]
+AU_223_uniq <- unique(AU_223_intersect$V7)
+AU_27_uniq <- unique(AU_27_intersect$V7)
+AU_223_27 <- AU_223_uniq[AU_223_uniq %in% AU_27_uniq]
+AU_common <- AU_215_219[AU_215_219 %in% AU_223_27]
+
+# convert it to bed file
+AU_common_peaks <- data.frame(do.call(rbind,strsplit(AU_common,split = ":|-")))
+colnames(AU_common_peaks) <- c("seqnames", "start", "end")
+options(scipen = 999) # turnoff scientific format
+
+# write the intersected peaks
+write.table(AU_common_peaks, "~/project/Gozde_data/ATACseq/peaks/AU_common_peaks.bed", row.names = F, quote = F, sep="\t")
+
+
+
+# read bedtools intersect results for each replicate
+DI_214_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/DI_214_S4_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+DI_217_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/DI_217_S5_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+DI_222_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/DI_222_S6_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+
+
+# the same peak is written multiple times as bedtools finds more matching regions
+# need to get only the unique peaks and compare them with each other
+# create a unique name for a peak
+DI_214_intersect$V7 <- paste0(DI_214_intersect$V1, ":", DI_214_intersect$V2, "-", DI_214_intersect$V3)
+DI_217_intersect$V7 <- paste0(DI_217_intersect$V1, ":", DI_217_intersect$V2, "-", DI_217_intersect$V3)
+DI_222_intersect$V7 <- paste0(DI_222_intersect$V1, ":", DI_222_intersect$V2, "-", DI_222_intersect$V3)
+
+
+# compare all the unique peaks between replicates & get the common ones in a list
+DI_214_uniq <- unique(DI_214_intersect$V7)
+DI_217_uniq <- unique(DI_217_intersect$V7)
+DI_214_217 <- DI_214_uniq[DI_214_uniq %in% DI_217_uniq]
+DI_222_uniq <- unique(DI_222_intersect$V7)
+DI_common <- DI_214_217[DI_214_217 %in% DI_222_uniq]
+
+# convert it to bed file
+DI_common_peaks <- data.frame(do.call(rbind,strsplit(DI_common,split = ":|-")))
+colnames(DI_common_peaks) <- c("seqnames", "start", "end")
+options(scipen = 999) # turnoff scientific format
+
+# write the intersected peaks
+write.table(DI_common_peaks, "~/project/Gozde_data/ATACseq/peaks/DI_common_peaks.bed", row.names = F, quote = F, sep="\t")
+
+
+
+# read bedtools intersect results for each replicate
+DU_213_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/DU_213_S1_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+DU_221_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/DU_221_S3_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+DU_23_intersect <- read.table("~/project/Gozde_data/ATACseq/peaks/DU_23_S2_intersected.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+
+
+# the same peak is written multiple times as bedtools finds more matching regions
+# need to get only the unique peaks and compare them with each other
+# create a unique name for a peak
+DU_213_intersect$V7 <- paste0(DU_213_intersect$V1, ":", DU_213_intersect$V2, "-", DU_213_intersect$V3)
+DU_221_intersect$V7 <- paste0(DU_221_intersect$V1, ":", DU_221_intersect$V2, "-", DU_221_intersect$V3)
+DU_23_intersect$V7 <- paste0(DU_23_intersect$V1, ":", DU_23_intersect$V2, "-", DU_23_intersect$V3)
+
+
+# compare all the unique peaks between replicates & get the common ones in a list
+DU_213_uniq <- unique(DU_213_intersect$V7)
+DU_221_uniq <- unique(DU_221_intersect$V7)
+DU_213_221 <- DU_213_uniq[DU_213_uniq %in% DU_221_uniq]
+DU_23_uniq <- unique(DU_23_intersect$V7)
+DU_common <- DU_213_221[DU_213_221 %in% DU_23_uniq]
+
+# convert it to bed file
+DU_common_peaks <- data.frame(do.call(rbind,strsplit(DU_common,split = ":|-")))
+colnames(DU_common_peaks) <- c("seqnames", "start", "end")
+options(scipen = 999) # turnoff scientific format
+
+# write the intersected peaks
+write.table(DU_common_peaks, "~/project/Gozde_data/ATACseq/peaks/DU_common_peaks.bed", row.names = F, quote = F, sep="\t")
+```
+
+```{r}
+library(ggplot2)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+
+##############################################################################################################################
+#GenomicAlignments TSS enrichment
+
+## AI_merged bam
+library(GenomicAlignments)
+AI_merged = readGAlignmentPairs(
+ "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/merged_filtered_bams/AI_merged_filtered.bam",
+  param = ScanBamParam(
+    mapqFilter = 1, 
+    flag = scanBamFlag(
+      isPaired = TRUE, 
+      isProperPair = TRUE), 
+    what = c("mapq", "isize")))
+# save
+save(AI_merged, file="~/project/Gozde_data/ATACseq/R_objs/AI_merged_GAlign.RData")
+
+GenomicAlignments::first(AI_merged)
+mcols(GenomicAlignments::first(AI_merged))
+class(mcols(GenomicAlignments::first(AI_merged)))
+head(mcols(GenomicAlignments::first(AI_merged))$isize)
+length(mcols(GenomicAlignments::first(AI_merged))$isize) #184508466
+fraglengths = abs(mcols(GenomicAlignments::first(AI_merged))$isize)
+
+library(ggplot2)
+library(dplyr)
+
+# save
+pdf("~/project/Gozde_data/ATACseq/files/AI_merged_frag_dist.pdf")
+fragLenPlot <- table(fraglengths) %>% data.frame %>% rename(InsertSize = fraglengths, Count = Freq) %>% mutate(InsertSize = as.numeric(as.vector(InsertSize)), 
+    Count = as.numeric(as.vector(Count))) %>% ggplot(aes(x = InsertSize, y = log10(Count))) + 
+    geom_line()
+print(fragLenPlot + theme_bw() + lims(x=c(-1,1000)))
+dev.off()
+
+## AU_merged_bam
+library(GenomicAlignments)
+AU_merged = readGAlignmentPairs(
+ "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/merged_filtered_bams/AU_merged_filtered.bam",
+  param = ScanBamParam(
+    mapqFilter = 1, 
+    flag = scanBamFlag(
+      isPaired = TRUE, 
+      isProperPair = TRUE), 
+    what = c("mapq", "isize")))
+# save
+save(AU_merged, file="~/project/Gozde_data/ATACseq/R_objs/AU_merged_GAlign.RData")
+
+GenomicAlignments::first(AU_merged)
+mcols(GenomicAlignments::first(AU_merged))
+class(mcols(GenomicAlignments::first(AU_merged)))
+head(mcols(GenomicAlignments::first(AU_merged))$isize)
+length(mcols(GenomicAlignments::first(AU_merged))$isize) #184508466
+fraglengths = abs(mcols(GenomicAlignments::first(AU_merged))$isize)
+
+library(ggplot2)
+library(dplyr)
+# save
+pdf("~/project/Gozde_data/ATACseq/files/AU_merged_frag_dist.pdf")
+fragLenPlot <- table(fraglengths) %>% data.frame %>% rename(InsertSize = fraglengths, Count = Freq) %>% mutate(InsertSize = as.numeric(as.vector(InsertSize)), 
+    Count = as.numeric(as.vector(Count))) %>% ggplot(aes(x = InsertSize, y = log10(Count))) + 
+    geom_line()
+print(fragLenPlot + theme_bw() + lims(x=c(-1,1000)))
+dev.off()
+
+## DU_merged bam
+library(GenomicAlignments)
+DU_merged = readGAlignmentPairs(
+ "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/merged_filtered_bams/DU_merged_filtered.bam",
+  param = ScanBamParam(
+    mapqFilter = 1, 
+    flag = scanBamFlag(
+      isPaired = TRUE, 
+      isProperPair = TRUE), 
+    what = c("mapq", "isize")))
+# save
+save(DU_merged, file="~/project/Gozde_data/ATACseq/R_objs/DU_merged_GAlign.RData")
+
+GenomicAlignments::first(DU_merged)
+mcols(GenomicAlignments::first(DU_merged))
+class(mcols(GenomicAlignments::first(DU_merged)))
+head(mcols(GenomicAlignments::first(DU_merged))$isize)
+length(mcols(GenomicAlignments::first(DU_merged))$isize) #184508466
+fraglengths = abs(mcols(GenomicAlignments::first(DU_merged))$isize)
+
+library(ggplot2)
+library(dplyr)
+
+# save
+pdf("~/project/Gozde_data/ATACseq/files/DU_merged_frag_dist.pdf")
+fragLenPlot <- table(fraglengths) %>% data.frame %>% rename(InsertSize = fraglengths, Count = Freq) %>% mutate(InsertSize = as.numeric(as.vector(InsertSize)), 
+    Count = as.numeric(as.vector(Count))) %>% ggplot(aes(x = InsertSize, y = log10(Count))) + 
+    geom_line()
+print(fragLenPlot + theme_bw() + lims(x=c(-1,1000)))
+dev.off()
+
+## DI_merged bam
+library(GenomicAlignments)
+DI_merged = readGAlignmentPairs(
+ "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/merged_filtered_bams/DI_merged_filtered.bam",
+  param = ScanBamParam(
+    mapqFilter = 1, 
+    flag = scanBamFlag(
+      isPaired = TRUE, 
+      isProperPair = TRUE), 
+    what = c("mapq", "isize")))
+# save
+save(DI_merged, file="~/project/Gozde_data/ATACseq/R_objs/DI_merged_GAlign.RData")
+
+GenomicAlignments::first(DI_merged)
+mcols(GenomicAlignments::first(DI_merged))
+class(mcols(GenomicAlignments::first(DI_merged)))
+head(mcols(GenomicAlignments::first(DI_merged))$isize)
+length(mcols(GenomicAlignments::first(DI_merged))$isize) #184508466
+fraglengths = abs(mcols(GenomicAlignments::first(DI_merged))$isize)
+
+library(ggplot2)
+library(dplyr)
+
+# save
+pdf("~/project/Gozde_data/ATACseq/files/DI_merged_frag_dist.pdf")
+fragLenPlot <- table(fraglengths) %>% data.frame %>% rename(InsertSize = fraglengths, Count = Freq) %>% mutate(InsertSize = as.numeric(as.vector(InsertSize)), 
+    Count = as.numeric(as.vector(Count))) %>% ggplot(aes(x = InsertSize, y = log10(Count))) + 
+    geom_line()
+print(fragLenPlot + theme_bw() + lims(x=c(-1,1000)))
+dev.off()
+################################################################
+# generate TSS enrichment plot
+
+## load the library
+library(ATACseqQC)
+## input the bamFile from the ATACseqQC package 
+bam_AI_210 <- "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AI_210_S14_hg38_aligned_mtRemoved.bam"
+AI_210_bamfile_labels <- gsub(".bam", "", basename(bam_AI_210))
+
+## bamfile tags to be read in
+possibleTag <- list("integer"=c("AM", "AS", "CM", "CP", "FI", "H0", "H1", "H2", 
+                                "HI", "IH", "MQ", "NH", "NM", "OP", "PQ", "SM",
+                                "TC", "UQ"), 
+                 "character"=c("BC", "BQ", "BZ", "CB", "CC", "CO", "CQ", "CR",
+                               "CS", "CT", "CY", "E2", "FS", "LB", "MC", "MD",
+                               "MI", "OA", "OC", "OQ", "OX", "PG", "PT", "PU",
+                               "Q2", "QT", "QX", "R2", "RG", "RX", "SA", "TS",
+                               "U2"))
+library(Rsamtools)
+bamTop100 <- scanBam(BamFile(bam_AI_210, yieldSize = 100),
+                     param = ScanBamParam(tag=unlist(possibleTag)))[[1]]$tag
+tags <- names(bamTop100)[lengths(bamTop100)>0]
+tags
+
+## files will be output into outPath
+outPath <- "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/splited"
+dir.create(outPath)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+seqlev <- c(paste0("chr",1:22), "chrX")
+seqinformation <- seqinfo(TxDb.Hsapiens.UCSC.hg38.knownGene)
+which <- as(seqinformation[seqlev], "GRanges")
+gal <- readBamFile(bam_AI_210, tag=tags, which=which, asMates=TRUE, bigFile=TRUE)
+shiftedBamfile <- file.path(outPath, "AI_210_shifted.bam")
+gal1 <- shiftGAlignmentsList(gal, outbam=shiftedBamfile)
+
+library(ATACseqQC)
+library(ggplot2)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+txs <- transcripts(TxDb.Hsapiens.UCSC.hg38.knownGene)
+tsse <- TSSEscore(gal1, txs)
+tsse$TSSEscore
+
+pdf("~/project/Gozde_data/ATACseq/files/AI_merged_TSS_enrichment.pdf")
+# put data in a dataframe to plot
+df <- data.frame(x_axis_val=100*(-9:10-.5), values=tsse$values)
+ggplot(df, aes(x_axis_val, values))+ geom_point(data = df, aes(y = values), colour = 'purple', size = 2) + geom_line(colour="purple") + theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +  xlab("distance to TSS") +  ylab("aggregate TSS score")
+dev.off() 
+
+################################################################################################################################
+# Quality Control and Counting
+- Perform various tests/controls to assess the quality of the ATAC-seq reads.
+
+```{r}
+#install.packages(knitr)
+#install.packages(rmdformats)
+#install.packages(dplyr)
+#install.packages(DT)
+#install.packages(tidyr)
+#install.packages(ggplot2)
+#install.packages(magrittr)
+#install.packages(devtools)
+ 
+ #source("https://bioconductor.org/biocLite.R")
+ 
+ # Needed for mac and Linux only
+#BiocManager::install("Rsubread")
+#BiocManager::install("Rsamtools")
+#BiocManager::install("GenomicAlignments")
+#BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
+#BiocManager::install("soGGi")
+#BiocManager::install("rtracklayer")
+#BiocManager::install("ChIPQC")
+#BiocManager::install("ChIPseeker")
+#BiocManager::install("rGREAT")
+#BiocManager::install("limma")
+#BiocManager::install("DESeq2")
+#BiocManager::install("tracktables")
+#BiocManager::install("clusterProfiler")
+#BiocManager::install("org.Hs.eg.db")
+#BiocManager::install("MotifDb")
+#BiocManager::install("Biostrings")
+#BiocManager::install("edgeR")
+#BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
+```
+
+### Proportion of mapped reads
+
+Check the mapping rate to there are not any problems with the aligmnent.
+Get the percentages for mapped and unmapped reads.
+
+```{r}
+# package
+library(Rsubread)
+
+# data
+bam_AI_210 <- "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AI_210_S14_hg38_aligned_mtRemoved.bam"
+
+# get the QC values
+pmapped <- propmapped(bam_AI_210)
+pmapped
+```
+
+### Distribution of mapped reads
+
+- High mapping rate but also check the distribution of mapped reads across chromosomes.
+- Since I used digitonin detergent for ATAC-seq protocol, there are not many mitochondrial reads so no need to check for that.
+
+```{r}
+library(Rsamtools)
+library(ggplot2)
+library(magrittr)
+idxstatsBam(bam_AI_210) %>%
+  ggplot(aes(seqnames,mapped,fill=seqnames))+geom_bar(stat="identity")+coord_flip()
+```
+### TSS
+
+```{r}
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+TSSs <- resize(genes(TxDb.Hsapiens.UCSC.hg38.knownGene),fix="start",1)
+TSSs
+```
+
+### Nucleosome positioning
+Adjust the read start sites due to Tn5 transposase activity, it inserts two adaptors into accessible DNA locations separated by 9 bp.
+Therefore, all reads in bamfile need to be shifted, the adjusted reads will be written into a new bamfile.
+
+```{r}
+library(ATACseqQC)
+library(Rsamtools)
+library(ggplot2)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(dplyr)
+
+## bamfile tags to be read in
+possibleTag <- list("integer"=c("AM", "AS", "CM", "CP", "FI", "H0", "H1", "H2", 
+                                "HI", "IH", "MQ", "NH", "NM", "OP", "PQ", "SM",
+                                "TC", "UQ"), 
+                 "character"=c("BC", "BQ", "BZ", "CB", "CC", "CO", "CQ", "CR",
+                               "CS", "CT", "CY", "E2", "FS", "LB", "MC", "MD",
+                               "MI", "OA", "OC", "OQ", "OX", "PG", "PT", "PU",
+                               "Q2", "QT", "QX", "R2", "RG", "RX", "SA", "TS",
+                               "U2"))
+# bam_files
+files <- list.files(path = "~/project/Gozde_data/ATACseq/aligned_reads/Hg38", pattern = "_hg38_aligned_mtRemoved.bam$", all.files = FALSE,
+           full.names = TRUE, recursive = FALSE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+length(files) #[1] 28
+head(files)
+#[1] "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AI_210_S14_hg38_aligned_mtRemoved.bam"
+#[2] "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AI_216_S11_hg38_aligned_mtRemoved.bam"
+#[3] "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AI_220_S12_hg38_aligned_mtRemoved.bam"
+#[4] "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AI_224_S13_hg38_aligned_mtRemoved.bam"
+#[5] "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AU_215_S7_hg38_aligned_mtRemoved.bam" 
+#[6] "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AU_219_S8_hg38_aligned_mtRemoved.bam" 
+
+## files will be output into outPath
+outPath <- "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/splited"
+dir.create(outPath)
+
+# empty list for dataframes
+df_list <- list()
+
+# get the transcripts
+txs <- transcripts(TxDb.Hsapiens.UCSC.hg38.knownGene)
+
+for (i in 1:length(files)) {
+	bam_file <- files[i]
+
+	# extract sample_id for naming
+	(sample_id <- gsub("_hg38_aligned_mtRemoved.bam", "", basename(bam_file)))
+
+	bamTop100 <- scanBam(BamFile(bam_file, yieldSize = 100),
+						 param = ScanBamParam(tag=unlist(possibleTag)))[[1]]$tag
+	tags <- names(bamTop100)[lengths(bamTop100)>0]
+	
+	## shift the coordinates of 5'ends of alignments in the bam file
+	seqlev <- c("chr22") # for fast analysis 
+	seqinformation <- seqinfo(TxDb.Hsapiens.UCSC.hg38.knownGene)
+	which <- as(seqinformation[seqlev], "GRanges")
+	gal <- readBamFile(bam_file, tag=tags, which=which, asMates=TRUE, bigFile=TRUE)
+	shiftedBamfile <- file.path(outPath, paste0(sample_id, "_shifted.bam"))
+	gal1 <- shiftGAlignmentsList(gal, outbam=shiftedBamfile)
+
+	tsse <- TSSEscore(gal1, txs)
+	tsse$TSSEscore
+
+	# put data in a dataframe to plot
+	df <- data.frame(x_axis_val=100*(-9:10-.5), values=tsse$values, sample_name=rep(sample_id, times= length(tsse$values)))
+	df_list[[i]] = df
+}
+
+dfbind = do.call(rbind, df_list)
+
+# save
+save(dfbind, file="~/project/Gozde_data/ATACseq/R_objs/dfbind.RData")
+
+dfbind$sample <- gsub("_.*", "", dfbind$sample_name)
+
+my_summ <- dfbind %>% group_by(x_axis_val) %>% summarise(
+  m = mean(values),
+  n= n()
+)
+  
+
+#save
+# create pdf
+pdf("~/project/Gozde_data/ATACseq/files/all_14_merged_chr22_TSS_enrichment.pdf")
+
+ggplot(my_summ, aes(x_axis_val, m))+ geom_point(data = my_summ, aes(y = m), color= "purple", size = 2) + geom_line() + theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +  xlab("distance to TSS") +  ylab("aggregate TSS score")
+
+dev.off() 
+
+```
+
+### Fragment size distributions
+
+```{r}
+## load the library
+library(ATACseqQC)
+
+## input the bamFile from the ATACseqQC package 
+bam_AI_210 <- "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AI_210_S14_hg38_aligned_mtRemoved.bam"
+AI_210_bamfile_labels <- gsub(".bam", "", basename(bam_AI_210))
+
+# input the bamFile from the ATACseqQC package 
+fragSize <- fragSizeDist(bam_AI_210, AI_210_bamfile_labels)
+
+## input the bamFile from the ATACseqQC package 
+bam_AI_216 <- "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/AI_216_S11_hg38_aligned_mtRemoved.bam"
+AI_216_bamfile_labels <- gsub(".bam", "", basename(bam_AI_216))
+
+# input the bamFile from the ATACseqQC package 
+fragSize <- fragSizeDist(bam_AI_216, AI_216_bamfile_labels)
+
+## input the bamFile from the ATACseqQC package 
+bam_DU_213 <- "~/project/Gozde_data/ATACseq/aligned_reads/Hg38/DU_213_S1_hg38_aligned_mtRemoved.bam"
+DU_213_bamfile_labels <- gsub(".bam", "", basename(bam_DU_213))
+
+# input the bamFile from the ATACseqQC package 
+## generate fragement size distribution
+pdf("~/project/Gozde_data/ATACseq/files/DU_213_frag_size_dist.pdf")
+fragSize <- fragSizeDist(bam_DU_213, DU_213_bamfile_labels)
+dev.off()
+```
+
+
+### Finding genes nearest to the peaks
+
+```{r}
+library(ChIPseeker)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+
+# run the following code per replicate
+MacsCalls_DU_213_filteredAnno <-  annotatePeak(myPeaks$DU_213, TxDb = TxDb.Hsapiens.UCSC.hg38.knownGene)
+MacsCalls_DU_213_filteredAnno
+
+# pie chart
+plotAnnoPie(MacsCalls_DU_213_filteredAnno)
+# bar plot
+plotAnnoBar(MacsCalls_DU_213_filteredAnno)
+```
+#########################################################################################################
+### Count
+
+-First need to create a read count matrix using featureCounts from Subread package:
+-The idea is to merge all the peaks, save it in a consensus peak, convert bed file to saf file format then give bam file directories for each replicate to featureCounts and let it count how many reads each peak region has in  each bam replicate.
+
+```{r}
+library(Rsubread)
+bamsToCount <- dir("~/project/Gozde_data/ATACseq/aligned_reads/Hg38",full.names = TRUE,pattern = "*_hg38_aligned_mtRemoved\\.bam$")
+#indexBam(bamsToCount) # if needed
+
+
+# get all the peaks to determine the background
+consensus_peaks <- import.bed("~/project/Gozde_data/ATACseq/peaks/consensus_peaks.bed")
+
+
+# save the bed file
+write.table(consensus_peaks_filt, file="~/project/Gozde_data/ATACseq/peaks/consensus_peaks_filt.bed", col.names = F, quote=F, row.names = F)
+# convert this bed file to saf file format in Linux terminal.
+
+# count peaks
+# the peaks need a unique ID for featurecounts to work (chr:Start-end)
+fcResults <- featureCounts(bamsToCount, annot.ext = "~/project/Gozde_data/ATACseq/peaks/consensus_peaks_filt.saf", isPairedEnd = TRUE, countMultiMappingReads = FALSE, maxFragLength=100, annot.inbuilt = "hg38")
+
+# save count results
+saveRDS(fcResults, file="~/project/Gozde_data/ATACseq/R_objs/fcResults.rds")
+
+# load 
+fcResults <- readRDS( file="~/project/Gozde_data/ATACseq/R_objs/fcResults.rds")
+
+# save the counts in a new object
+myCounts <- fcResults$counts
+colnames(myCounts) <- c("AI_210","AI_216","AI_220","AI_224","AU_215","AU_219", "AU_223", "AU_27", "DI_214", "DI_217", "DI_222", "DU_213", "DU_221", "DU_23")
+save(myCounts,file="~/project/Gozde_data/ATACseq/R_objs/myCounts.RData")
+
+# import data
+load("~/project/Gozde_data/ATACseq/R_objs/myCounts.RData")
+
+dim(myCounts) #203574     14
+```
+
+
