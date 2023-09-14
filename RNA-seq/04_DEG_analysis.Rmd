@@ -1,0 +1,573 @@
+---
+title: "04_differential_expression_analysis"
+output: html_document
+date: '2023-05-16'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Create count matrix
+- Use featurecounts from Subread package
+
+
+```{r packages, echo=TRUE,eval=FALSE,cache=FALSE}
+# install & load packages
+#install.packages("dplyr")
+library(dplyr) 
+#install.packages("DT")
+#install.packages("tidyr")
+library(tidyr) 
+#install.packages("ggplot2")
+library(ggplot2) 
+#install.packages("magrittr")
+library(magrittr) 
+#install.packages("devtools")
+library(devtools)
+
+#source("https://bioconductor.org/biocLite.R")
+ 
+# Needed for mac and Linux only
+# BiocManager::install("Rsubread")
+library(Rsubread) 
+ 
+#  BiocManager::install("Rsamtools")
+library(Rsamtools)
+#  BiocManager::install("GenomicAlignments")
+#  BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+#  BiocManager::install("soGGi")
+#  BiocManager::install("rtracklayer")
+#  BiocManager::install("ChIPQC")
+#  BiocManager::install("ChIPseeker")
+#  BiocManager::install("rGREAT")
+#  BiocManager::install("limma")
+#  BiocManager::install("DESeq2")
+library(DESeq2)
+#  BiocManager::install("tracktables")
+#  BiocManager::install("clusterProfiler")
+#  BiocManager::install("org.Mm.eg.db")
+#  BiocManager::install("MotifDb")
+#  BiocManager::install("Biostrings")
+#  BiocManager::install("edgeR")
+library(edgeR)
+#  BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
+ 
+#  Finally we need development version of soGGi (named here 1.10.4) 
+#  not version on Bioconductor (1.10.0)
+# devtools::install_github("ThomasCarroll/soGGi")
+ sessionInfo()
+```
+
+```{r, echo=TRUE,eval=FALSE,cache=FALSE}
+library(Rsubread)
+bamsToCount <- dir("~/project/Gozde_data/RNA-seq/aligned_reads",full.names = TRUE,pattern = "*_aligned_filtered\\.bam$")
+#indexBam(bamsToCount)
+
+# count peaks
+# the peaks need a unique ID for featurecounts to work (chr:Start-end)
+fcResults <- featureCounts(bamsToCount, annot.ext = "~/project/Gozde_data/humanhg38plusSeV/genes/genes.gtf", isGTFAnnotationFile=TRUE, isPairedEnd = TRUE, countMultiMappingReads = FALSE, maxFragLength=100, annot.inbuilt = "hg38")
+
+# save count results
+saveRDS(fcResults, file="~/project/Gozde_data/RNA-seq/R_objs/fcResults.rds")
+
+# load 
+fcResults <- readRDS("~/project/Gozde_data/RNA-seq/R_objs/fcResults.rds")
+# save the counts in a new object
+myCounts <- fcResults$counts
+colnames(myCounts) <- c("JU_DU_1","JU_DI_2","JU_AU_2","JU_AI_2","GM_DU_2","GM_DI_2", "GM_AU_2", "GM_AI_2", "JU_DU_3", "JU_DI_3", "JU_AU_3", "JU_DI_1", "JU_AI_3", "GM_DU_3", "GM_DI_3", "GM_AU_3", "GM_AI_3", "JU_AU_1", "JU_AI_1", "GM_DU_1", "GM_DI_1", "GM_AU_1", "GM_AI_1", "JU_DU_2")
+save(myCounts,file="~/project/Gozde_data/RNA-seq/R_objs/myCounts.RData")
+```
+
+# Differential expression analysis
+
+With our counts of genes in a DESeq2 object and perform a PCA.
+
+With the new DESeq2 object we can now test for any differences in RNA-seq signal between groups.
+
+In this code we look at differences between APH (A) and DMSO (D) samples.
+
+```{r, echo=TRUE,eval=FALSE,cache=TRUE}
+# DESeq2
+library(DESeq2)
+load(file="~/project/Gozde_data/RNA-seq/R_objs/myCounts.RData")
+
+Group <- factor(c("JU_DU","JU_DI","JU_AU","JU_AI","GM_DU","GM_DI", "GM_AU", "GM_AI","JU_DU", "JU_DI", "JU_AU", "JU_DI","JU_AI", "GM_DU", "GM_DI", "GM_AU", "GM_AI", "JU_AU", "JU_AI", "GM_DU", "GM_DI", "GM_AU", "GM_AI", "JU_DU"))
+
+dim(myCounts)
+#[1] 54634    24
+
+# divide the counts matrix per cell type
+# GM12878
+myCounts_GM <- myCounts[,colnames(myCounts) %in% c("GM_DU_1","GM_DU_2", "GM_DU_3", "GM_DI_1", "GM_DI_2", "GM_DI_3", "GM_AU_1","GM_AU_2","GM_AU_3", "GM_AI_1",  "GM_AI_2",  "GM_AI_3")]
+
+dim(myCounts_GM)
+#54634    12
+
+# JURKAT
+myCounts_JU <- myCounts[,colnames(myCounts) %in% c("JU_DU_1","JU_DU_2", "JU_DU_3", "JU_DI_1", "JU_DI_2", "JU_DI_3", "JU_AU_1","JU_AU_2","JU_AU_3", "JU_AI_1",  "JU_AI_2",  "JU_AI_3")]
+
+dim(myCounts_JU)
+#54634    12
+
+######################################################
+# https://bioinformatics-core-shared-training.github.io/RNAseq-R/rna-seq-preprocessing.nb.html#data_import
+
+#https://www.nathalievialaneix.eu/doc/html/edgeR-RNAseq.html#Data_description_and_importation
+
+# filter the count matrix to remove lowly expressed genes
+# we would like to keep genes that have expression in all the replicates
+# DU
+my_DU <- myCounts_GM[,colnames(myCounts_GM) %in% c("GM_DU_1", "GM_DU_2", "GM_DU_3")]
+head(my_DU)
+#     GM_DU_2 GM_DU_3 GM_DU_1
+#TRNP    1355    1532    1292
+#TRNT      16       2      10
+#CYTB   45605   51361   44436
+#TRNE      62      40      75
+#ND6    12706   15828   15444
+#ND5    39884   50131   48406
+
+# Obtain CPMs
+myCPM_DU <- cpm(my_DU)
+# Have a look at the output
+head(myCPM_DU)
+#         GM_DU_2      GM_DU_3     GM_DU_1
+#TRNP  103.711065  102.2404131   87.459612
+#TRNT    1.224633    0.1334731    0.676932
+#CYTB 3490.585331 3427.6565656 3008.014942
+#TRNE    4.745451    2.6694625    5.076990
+#ND6   972.511287 1056.3063048 1045.453749
+#ND5  3052.702672 3345.5705943 3276.756938
+
+# Which values in myCPM are greater than 0.5?
+thresh <- myCPM_DU > 0.5
+# This produces a logical matrix with TRUEs and FALSEs
+head(thresh)
+
+table(rowSums(thresh))
+#    0     1     2     3 
+#39668   897   793 13276 
+
+keep_DU <- rowSums(thresh)>=3 # create a matrix for genes
+
+length(keep_DU) #54634
+sum(keep_DU) #13276 genes are expressed in all DU replicates with at least CPM of 0.5
+
+# DI
+# group replicates based on treatment to check the gene expression levels
+my_DI <- myCounts_GM[,colnames(myCounts_GM) %in% c("GM_DI_1", "GM_DI_2", "GM_DI_3")]
+head(my_DI)
+#     GM_DI_2 GM_DI_3 GM_DI_1
+#TRNP    1193    1522    1363
+#TRNT      12       7      18
+#CYTB   41036   55508   41326
+#TRNE      50      62      70
+#ND6    11496   16814   15477
+#ND5    35448   53320   48967
+
+# Obtain CPMs
+myCPM_DI <- cpm(my_DI)
+# Have a look at the output
+head(myCPM_DI)
+#         GM_DI_2      GM_DI_3     GM_DI_1
+#TRNP  101.871272  100.1851912   82.248261
+#TRNT    1.024690    0.4607729    1.086184
+#CYTB 3504.098504 3653.7973676 2493.757610
+#TRNE    4.269542    4.0811313    4.224049
+#ND6   981.653095 1106.7764816  933.937147
+#ND5  3026.934491 3509.7729272 2954.842688
+
+# Which values in myCPM are greater than 0.5?
+thresh <- myCPM_DI > 0.5
+# This produces a logical matrix with TRUEs and FALSEs
+head(thresh)
+
+table(rowSums(thresh))
+#    0     1     2     3 
+#39563   969   770 13332 
+
+keep_DI <- rowSums(thresh)>=3 # create a matrix for genes
+
+length(keep_DI) #54634
+sum(keep_DI) #13332 genes are expressed in all DI replicates with at least CPM of 0.5
+
+# AU
+my_AU <- myCounts_GM[,colnames(myCounts_GM) %in% c("GM_AU_1", "GM_AU_2", "GM_AU_3")]
+head(my_AU)
+#     GM_AU_2 GM_AU_3 GM_AU_1
+#TRNP    1505    1435    1130
+#TRNT      17       8      10
+#CYTB   66615   65698   40612
+#TRNE     129      79      57
+#ND6    22887   20319   15573
+#ND5    69709   64584   50088
+
+# Obtain CPMs
+myCPM_AU <- cpm(my_AU)
+# Have a look at the output
+head(myCPM_AU)
+#TRNP   96.435334   89.8286320   74.4684469
+#TRNT    1.089303    0.5007868    0.6590128
+#CYTB 4268.464947 4112.5863873 2676.3828000
+#TRNE    8.265886    4.9452696    3.7563730
+#ND6  1466.521913 1271.9358702 1026.2806398
+#ND5  4466.718052 4042.8518256 3300.8633331
+
+# Which values in myCPM are greater than 0.5?
+thresh <- myCPM_AU > 0.5
+# This produces a logical matrix with TRUEs and FALSEs
+head(thresh)
+
+table(rowSums(thresh))
+#    0     1     2     3 
+#38190  1066   835 14543 
+
+keep_AU <- rowSums(thresh)>=3 # create a matrix for genes
+
+length(keep_AU) #54634
+sum(keep_AU) #14543 genes are expressed in all AU replicates with at least CPM of 0.5
+
+# AI
+my_AI <- myCounts_GM[,colnames(myCounts_GM) %in% c("GM_AI_1", "GM_AI_2", "GM_AI_3")]
+head(my_AI)
+#     GM_AI_2 GM_AI_3 GM_AI_1
+#TRNP    1230    1355    1321
+#TRNT      12       8      19
+#CYTB   57923   56871   52102
+#TRNE      86      69      99
+#ND6    15360   18421   19305
+#ND5    47190   54714   60289
+
+# Obtain CPMs
+myCPM_AI <- cpm(my_AI)
+# Have a look at the output
+head(myCPM_AI)
+#          GM_AI_2     GM_AI_3     GM_AI_1
+#TRNP   89.8216449  100.002561   79.356641
+#TRNT    0.8763087    0.590421    1.141390
+#CYTB 4229.8692168 4197.229257 3129.931631
+#TRNE    6.2802126    5.092381    5.947243
+#ND6  1121.6751751 1359.518211 1159.712298
+#ND5  3446.0840830 4038.036989 3621.750568
+
+# Which values in myCPM are greater than 0.5?
+thresh <- myCPM_AI > 0.5
+# This produces a logical matrix with TRUEs and FALSEs
+head(thresh)
+
+table(rowSums(thresh))
+#    0     1     2     3 
+#38222  1094   826 14492 
+
+keep_AI <- rowSums(thresh)>=3 # create a matrix for genes
+
+length(keep_AI) #54634
+sum(keep_AI) #14492 genes are expressed in all AI replicates with at least CPM of 0.5
+########################################################
+# Subset the rows of countdata to keep the more highly expressed genes
+GM_keep <- rowSums(cbind(keep_DU, keep_DI, keep_AU, keep_AI)) >= 1
+
+summary(GM_keep)
+#   Mode   FALSE    TRUE 
+#logical   39442   15192 
+
+head(GM_keep)
+#TRNP TRNT CYTB TRNE  ND6  ND5 
+#TRUE TRUE TRUE TRUE TRUE TRUE 
+
+GM_counts_keep <- myCounts_GM[GM_keep, ]
+dim(GM_counts_keep) #[1] 15192    12
+
+# save
+save(GM_counts_keep, file= "~/project/Gozde_data/RNA-seq/R_objs/GM_counts_keep.RData")
+# load
+load("~/project/Gozde_data/RNA-seq/R_objs/GM_counts_keep.RData")
+
+# Let's have a look and see whether our threshold of 0.5 does indeed correspond to a count of about 10-15
+# We will look at the first sample
+plot(cpm(myCounts_GM)[,1],myCounts_GM[,1])
+# Let us limit the x and y-axis so we can actually look to see what is happening at the smaller counts
+plot(cpm(myCounts_GM)[,1],myCounts_GM[,1],ylim=c(0,50),xlim=c(0,3))
+# Add a vertical line at 0.5 CPM
+abline(v=0.5)
+
+(GM_counts_keep[1:3,])
+#    GM_DU_2 GM_DI_2 GM_AU_2 GM_AI_2 GM_DU_3
+#TRNP    1355    1193    1505    1230    1532
+#TRNT      16      12      17      12       2
+#CYTB   45605   41036   66615   57923   51361
+#     GM_DI_3 GM_AU_3 GM_AI_3 GM_DU_1 GM_DI_1
+#TRNP    1522    1435    1355    1292    1363
+#TRNT       7       8       8      10      18
+#CYTB   55508   65698   56871   44436   41326
+#     GM_AU_1 GM_AI_1
+#TRNP    1130    1321
+#TRNT      10      19
+#CYTB   40612   52102
+
+# create group names for GM samples
+Group_GM <- factor(c("GM_DU","GM_DI", "GM_AU", "GM_AI", "GM_DU", "GM_DI", "GM_AU", "GM_AI", "GM_DU", "GM_DI", "GM_AU", "GM_AI"))
+
+# create DESeq2 object with filtered count matrix
+metaData_GM <- data.frame(Group_GM, row.names = colnames(GM_counts_keep))
+GM_RNA_DDS <- DESeqDataSetFromMatrix(GM_counts_keep, metaData_GM, ~Group_GM)
+GM_RNA_DDS <- DESeq(GM_RNA_DDS)
+
+# save
+save(GM_RNA_DDS, file="~/project/Gozde_data/RNA-seq/R_objs/GM_RNA_DDS.RData")
+
+# load 
+load(file="~/project/Gozde_data/RNA-seq/R_objs/GM_RNA_DDS.RData")
+
+#normalize the reads
+GM_RNA_Rlog <- rlog(GM_RNA_DDS)
+
+# run it separately in terminal
+plotPCA(GM_RNA_Rlog, intgroup = "Group_GM", ntop = nrow(GM_RNA_Rlog))
+
+GM_APHMinusDMSO_U <- results(GM_RNA_DDS, c("Group_GM", "GM_AU", "GM_DU"), format = "DataFrame")
+GM_APHMinusDMSO_I<- results(GM_RNA_DDS, c("Group_GM", "GM_AI", "GM_DI"), format = "DataFrame")
+GM_DMSO_IMinus_DMSO_U <- results(GM_RNA_DDS, c("Group_GM", "GM_DI", "GM_DU"), format = "DataFrame")
+GM_APH_IMinus_APH_U <- results(GM_RNA_DDS, c("Group_GM", "GM_AI", "GM_AU"), format = "DataFrame")
+
+
+# save
+write.table(GM_APHMinusDMSO_U, file="~/project/Gozde_data/RNA-seq/files/GM_APHMinusDMSO_U.txt", col.names = T, quote=F, row.names = T, sep="\t")
+
+write.table(GM_APHMinusDMSO_I, file="~/project/Gozde_data/RNA-seq/files/GM_APHMinusDMSO_I.txt", col.names = T, quote=F, row.names = T, sep="\t")
+
+write.table(GM_DMSO_IMinus_DMSO_U, file="~/project/Gozde_data/RNA-seq/files/GM_DMSO_IMinus_DMSO_U.txt", col.names = T, quote=F, row.names = T, sep="\t")
+
+write.table(GM_APH_IMinus_APH_U, file="~/project/Gozde_data/RNA-seq/files/GM_APH_IMinus_APH_U.txt", col.names = T, quote=F, row.names = T, sep="\t")
+
+########################################################
+########################################################
+# JURKAT
+# filter the count matrix to remove lowly expressed genes
+# we would like to keep genes that have expression in all the replicates
+# DU
+my_DU <- myCounts_JU[,colnames(myCounts_JU) %in% c("JU_DU_1", "JU_DU_2", "JU_DU_3")]
+head(my_DU)
+#     JU_DU_1 JU_DU_3 JU_DU_2
+#TRNP     197     206     238
+#TRNT       2       1       7
+#CYTB   46642   42204   41522
+#TRNE      42      62      74
+#ND6     7157    7105    7077
+#ND5    27045   28652   27478
+
+# Obtain CPMs
+myCPM_DU <- cpm(my_DU)
+# Have a look at the output
+head(myCPM_DU)
+#          JU_DU_1      JU_DU_3      JU_DU_2
+#TRNP   11.6361832 1.147595e+01   14.5388100
+#TRNT    0.1181338 5.570851e-02    0.4276121
+#CYTB 2754.9992764 2.351122e+03 2536.4725597
+#TRNE    2.4808106 3.453927e+00    4.5204703
+#ND6   422.7419455 3.958089e+02  432.3157917
+#ND5  1597.4648478 1.596160e+03 1678.5605943
+
+# Which values in myCPM are greater than 0.5?
+thresh <- myCPM_DU > 0.5
+# This produces a logical matrix with TRUEs and FALSEs
+head(thresh)
+
+table(rowSums(thresh))
+#    0     1     2     3 
+#39662   831   723 13418 
+
+keep_DU <- rowSums(thresh)>=3 # create a matrix for genes
+
+length(keep_DU) #54634
+sum(keep_DU) #13418 genes are expressed in all DU replicates with at least CPM of 0.5
+
+# DI
+# group replicates based on treatment to check the gene expression levels
+my_DI <- myCounts_JU[,colnames(myCounts_JU) %in% c("JU_DI_1", "JU_DI_2", "JU_DI_3")]
+head(my_DI)
+#     JU_DI_2 JU_DI_3 JU_DI_1
+#TRNP     269     175     181
+#TRNT       8       0       5
+#CYTB   40268   37350   47102
+#TRNE      72      27      50
+#ND6     6282    5072    7271
+#ND5    25515   21225   28261
+
+# Obtain CPMs
+myCPM_DI <- cpm(my_DI)
+# Have a look at the output
+head(myCPM_DI)
+#         JU_DI_2      JU_DI_3     JU_DI_1
+#TRNP   19.6596584   11.465643   11.7262155
+#TRNT    0.5846739    0.000000    0.3239286
+#CYTB 2942.9558567 2447.095723 3051.5370412
+#TRNE    5.2620647    1.768985    3.2392861
+#ND6   459.1151458  332.307082  471.0569790
+#ND5  1864.7441811 1390.618654 1830.9092676
+
+# Which values in myCPM are greater than 0.5?
+thresh <- myCPM_DI > 0.5
+# This produces a logical matrix with TRUEs and FALSEs
+head(thresh)
+
+table(rowSums(thresh))
+#    0     1     2     3 
+#39527   927   728 13452 
+
+keep_DI <- rowSums(thresh)>=3 # create a matrix for genes
+
+length(keep_DI) #54634
+sum(keep_DI) #13452 genes are expressed in all DI replicates with at least CPM of 0.5
+
+# AU
+my_AU <- myCounts_JU[,colnames(myCounts_JU) %in% c("JU_AU_1", "JU_AU_2", "JU_AU_3")]
+head(my_AU)
+#     JU_AU_2 JU_AU_3 JU_AU_1
+#TRNP     287     377     220
+#TRNT      12       6       2
+#CYTB   55184   90377   49376
+#TRNE      72     107      42
+#ND6     8641   12967    8973
+#ND5    33317   52030   33442
+
+# Obtain CPMs
+myCPM_AU <- cpm(my_AU)
+# Have a look at the output
+head(myCPM_AU)
+#TRNP   16.9924239   14.8962894   14.9395475
+#TRNT    0.7104846    0.2370762    0.1358141
+#CYTB 3267.2819463 3571.0396535 3352.9777065
+#TRNE    4.2629077    4.2278593    2.8520954
+#ND6   511.6081346  512.3612334  609.3298153
+#ND5  1972.6013447 2055.8459915 2270.9470281
+
+# Which values in myCPM are greater than 0.5?
+thresh <- myCPM_AU > 0.5
+# This produces a logical matrix with TRUEs and FALSEs
+head(thresh)
+
+table(rowSums(thresh))
+#    0     1     2     3 
+#39082   828   709 14015
+
+keep_AU <- rowSums(thresh)>=3 # create a matrix for genes
+
+length(keep_AU) #54634
+sum(keep_AU) #14015 genes are expressed in all AU replicates with at least CPM of 0.5
+
+# AI
+my_AI <- myCounts_JU[,colnames(myCounts_JU) %in% c("JU_AI_1", "JU_AI_2", "JU_AI_3")]
+head(my_AI)
+#     JU_AI_2 JU_AI_3 JU_AI_1
+#TRNP     250     244     206
+#RNT       5       4       1
+#CYTB   44893   65712   58720
+#TRNE      64      50      48
+#ND6     6203    8053    8644
+#ND5    24799   34072   34271
+
+# Obtain CPMs
+myCPM_AI <- cpm(my_AI)
+# Have a look at the output
+head(myCPM_AI)
+#          JU_AI_2     JU_AI_3     JU_AI_1
+#TRNP   19.9021958   13.9031006 1.259083e+01
+#TRNT    0.3980439    0.2279197 6.112054e-02
+#CYTB 3573.8771102 3744.2645436 3.588998e+03
+#TRNE    5.0949621    2.8489960 2.933786e+00
+#ND6   493.8132830  458.8593007 5.283259e+02
+#ND5  1974.2182179 1941.4198553 2.094662e+03
+
+# Which values in myCPM are greater than 0.5?
+thresh <- myCPM_AI > 0.5
+# This produces a logical matrix with TRUEs and FALSEs
+head(thresh)
+
+table(rowSums(thresh))
+#    0     1     2     3 
+#39021   889   705 14019
+
+keep_AI <- rowSums(thresh)>=3 # create a matrix for genes
+
+length(keep_AI) #54634
+sum(keep_AI) #14019 genes are expressed in all AI replicates with at least CPM of 0.5
+########################################################
+# Subset the rows of countdata to keep the more highly expressed genes
+JU_keep <- rowSums(cbind(keep_DU, keep_DI, keep_AU, keep_AI)) >= 1
+
+summary(JU_keep)
+#   Mode   FALSE    TRUE 
+#logical   40017   14617 
+
+head(JU_keep)
+#TRNP  TRNT  CYTB  TRNE   ND6   ND5 
+# TRUE FALSE  TRUE  TRUE  TRUE  TRUE 
+
+JU_counts_keep <- myCounts_JU[JU_keep, ]
+dim(JU_counts_keep) #[1] 14617    12
+
+# save
+save(JU_counts_keep, file= "~/project/Gozde_data/RNA-seq/R_objs/JU_counts_keep.RData")
+# load
+load("~/project/Gozde_data/RNA-seq/R_objs/JU_counts_keep.RData")
+
+# Let's have a look and see whether our threshold of 0.5 does indeed correspond to a count of about 10-15
+# We will look at the first sample
+plot(cpm(myCounts_JU)[,1],myCounts_JU[,1])
+# Let us limit the x and y-axis so we can actually look to see what is happening at the smaller counts
+plot(cpm(myCounts_JU)[,1],myCounts_JU[,1],ylim=c(0,50),xlim=c(0,3))
+# Add a vertical line at 0.5 CPM
+abline(v=0.5)
+
+(JU_counts_keep[1:3,])
+#     JU_DU_1 JU_DI_2 JU_AU_2 JU_AI_2 JU_DU_3
+#TRNP     197     269     287     250     206
+#CYTB   46642   40268   55184   44893   42204
+#TRNE      42      72      72      64      62
+#     JU_DI_3 JU_AU_3 JU_DI_1 JU_AI_3 JU_AU_1
+#TRNP     175     377     181     244     220
+#CYTB   37350   90377   47102   65712   49376
+#TRNE      27     107      50      50      42
+#     JU_AI_1 JU_DU_2
+#TRNP     206     238
+#CYTB   58720   41522
+#TRNE      48      74
+
+# create group names for JU samples
+Group_JU <- factor(c("JU_DU","JU_DI", "JU_AU", "JU_AI", "JU_DU", "JU_DI", "JU_AU", "JU_DI", "JU_AI", "JU_AU", "JU_AI", "JU_DU"))
+
+# create DESeq2 object with filtered count matrix
+metaData_JU <- data.frame(Group_JU, row.names = colnames(JU_counts_keep))
+JU_RNA_DDS <- DESeqDataSetFromMatrix(JU_counts_keep, metaData_JU, ~Group_JU)
+JU_RNA_DDS <- DESeq(JU_RNA_DDS)
+
+# save
+save(JU_RNA_DDS, file="~/project/Gozde_data/RNA-seq/R_objs/JU_RNA_DDS.RData")
+load(file="~/project/Gozde_data/RNA-seq/R_objs/JU_RNA_DDS.RData")
+
+#normalize the reads
+JU_RNA_Rlog <- rlog(JU_RNA_DDS)
+
+# run it separately in terminal
+plotPCA(JU_RNA_Rlog, intgroup = "Group_JU", ntop = nrow(JU_RNA_Rlog))
+
+JU_APHMinusDMSO_U <- results(JU_RNA_DDS, c("Group_JU", "JU_AU", "JU_DU"), format = "DataFrame")
+JU_APHMinusDMSO_I <- results(JU_RNA_DDS, c("Group_JU", "JU_AI", "JU_DI"), format = "DataFrame")
+JU_DMSO_IMinus_DMSO_U <- results(JU_RNA_DDS, c("Group_JU", "JU_DI", "JU_DU"), format = "DataFrame")
+JU_APH_IMinus_APH_U <- results(JU_RNA_DDS, c("Group_JU", "JU_AI", "JU_AU"), format = "DataFrame")
+JU_APH_IMinus_DMSO_U <- results(JU_RNA_DDS, c("Group_JU", "JU_AI", "JU_DU"), format = "DataFrame")
+
+write.table(JU_APHMinusDMSO_U, file="~/project/Gozde_data/RNA-seq/files/JU_APHMinusDMSO_U.txt", col.names = T, quote=F, row.names = T, sep="\t")
+
+write.table(JU_APHMinusDMSO_I, file="~/project/Gozde_data/RNA-seq/files/JU_APHMinusDMSO_I.txt", col.names = T, quote=F, row.names = T, sep="\t")
+
+write.table(JU_DMSO_IMinus_DMSO_U, file="~/project/Gozde_data/RNA-seq/files/JU_DMSO_IMinus_DMSO_U.txt", col.names = T, quote=F, row.names = T, sep="\t")
+
+write.table(JU_APH_IMinus_APH_U, file="~/project/Gozde_data/RNA-seq/files/JU_APH_IMinus_APH_U.txt", col.names = T, quote=F, row.names = T, sep="\t")
+
+write.table(JU_APH_IMinus_DMSO_U, file="~/project/Gozde_data/RNA-seq/files/JU_APH_IMinus_DMSO_U.txt", col.names = T, quote=F, row.names = T, sep="\t")
+```
+
