@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Büyükkahraman"
+  given-names: "Gözde"
+  orcid: "https://orcid.org/0000-0002-7963-4027"
+- family-names: "Kim"
+  given-names: "Tae Hoon"
+  orcid: "https://orcid.org/0000-0003-3950-7557"
+title: "G1/S Boundary Activates Interferon and Inflammatory Response Genes"
+version: 2.0.4
+doi: 10.1101/2023.08.24.554683
+date-released: 2023-09-05
+url: "https://github.com/Functional-Genomics-Lab/IFN_heterogeneity"
