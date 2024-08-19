@@ -1,6 +1,7 @@
 #! /bin/bash
 # load STAR
-module load star/2.7.3a
+# TODO if Ganymede
+# module load star/2.7.3a
 
 # Read file names
 while IFS=',' read -ra array; do

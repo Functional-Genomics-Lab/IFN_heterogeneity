@@ -14,50 +14,19 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r packages, echo=TRUE,eval=FALSE,cache=FALSE}
 # install & load packages
-#install.packages("dplyr")
 library(dplyr) 
 #install.packages("DT")
-#install.packages("tidyr")
 library(tidyr) 
-#install.packages("ggplot2")
 library(ggplot2) 
-#install.packages("magrittr")
 library(magrittr) 
-#install.packages("devtools")
 library(devtools)
-
-#source("https://bioconductor.org/biocLite.R")
- 
-# Needed for mac and Linux only
-# BiocManager::install("Rsubread")
+# Bioconductor
 library(Rsubread) 
- 
-#  BiocManager::install("Rsamtools")
 library(Rsamtools)
-#  BiocManager::install("GenomicAlignments")
-#  BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
 library(TxDb.Hsapiens.UCSC.hg38.knownGene)
-#  BiocManager::install("soGGi")
-#  BiocManager::install("rtracklayer")
-#  BiocManager::install("ChIPQC")
-#  BiocManager::install("ChIPseeker")
-#  BiocManager::install("rGREAT")
-#  BiocManager::install("limma")
-#  BiocManager::install("DESeq2")
 library(DESeq2)
-#  BiocManager::install("tracktables")
-#  BiocManager::install("clusterProfiler")
-#  BiocManager::install("org.Mm.eg.db")
-#  BiocManager::install("MotifDb")
-#  BiocManager::install("Biostrings")
-#  BiocManager::install("edgeR")
 library(edgeR)
-#  BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
- 
-#  Finally we need development version of soGGi (named here 1.10.4) 
-#  not version on Bioconductor (1.10.0)
-# devtools::install_github("ThomasCarroll/soGGi")
- sessionInfo()
+sessionInfo()
 ```
 
 ```{r, echo=TRUE,eval=FALSE,cache=FALSE}
