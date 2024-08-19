@@ -1,20 +1,19 @@
+#!/usr/bin/env Rscript
+
 #### Create plots for the paper ####
 # packages
 library(edgeR)
 library(DESeq2)
-#BiocManager::install("reshape2")
 library(reshape2)
 library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(RColorBrewer) 
 library(Cairo) 
-#BiocManager::install("ggrepel")
 library(ggrepel)
-#BiocManager::install("ggrastr")
 library(ggrastr)
 library(pheatmap)
-library("stringr")
+library(stringr)
 #####################################################
 # set the colors for samples
 hex_cols <- c("#1b9e77", "#d95f02", "#7570b3", "#e7298a")
@@ -22,10 +21,12 @@ hex_cols <- c("#1b9e77", "#d95f02", "#7570b3", "#e7298a")
 # PCA plot
 # GM12878
 # get the data
+# FIXME This hard-coded path will fail
 load(file="~/project/Gozde_data/RNA-seq/R_objs/GM_counts_keep.RData")
 # create group names for GM samples
 Group_GM <- factor(c("GM_DU","GM_DI", "GM_AU", "GM_AI", "GM_DU", "GM_DI", "GM_AU", "GM_AI", "GM_DU", "GM_DI", "GM_AU", "GM_AI"))
 colnames(GM_counts_keep) <- Group_GM
+# FIXME This hard-coded path will fail
 load(file="~/project/Gozde_data/RNA-seq/R_objs/GM_RNA_DDS.RData")
 
 #normalize the reads
@@ -46,10 +47,12 @@ ggsave(pca_gm, filename= "~/Gozde_data/RNA-seq/files/PCA_GM.pdf", device = cairo
   
 # JURKAT
 # get the data
+# FIXME This hard-coded path will fail
 load("~/project/Gozde_data/RNA-seq/R_objs/JU_counts_keep.RData")
 # create group names for JU samples
 Group_JU <- factor(c("JU_DU","JU_DI", "JU_AU", "JU_AI", "JU_DU", "JU_DI", "JU_AU", "JU_DI", "JU_AI", "JU_AU", "JU_AI", "JU_DU"))
 colnames(JU_counts_keep) <- Group_JU
+# FIXME This hard-coded path will fail
 load(file="~/project/Gozde_data/RNA-seq/R_objs/JU_RNA_DDS.RData")
 
 #normalize the reads
@@ -149,6 +152,7 @@ dev.off()
 
 ######################################################
 rm(list = ls())
+# TODO There might be more packages in here
 library(dplyr)
 library(ggpubr)
 library(Seurat)
@@ -157,9 +161,11 @@ library(destiny)
 library(ggrastr)
 library(DESeq2)
 library(edgeR)
+# FIXME This hard-coded path will fail
 source("~/onlybiohpc/pr3/OUR_DATA/utility_functions.R")
 
 # Load dataset
+# FIXME This hard-coded path will fail
 load(file="~/project/Gozde_data/RNA-seq/R_objs/GM_RNA_DDS.RData")
 
 # Normalize the reads
@@ -208,6 +214,7 @@ dev.off()
 
 
 # Overlaps - AI-DU and AU-DU
+# TODO Add to pixi
 library(VennDiagram)
 
 pdf('GM_AIDU_AUDU_OVERLAP.pdf')
@@ -317,6 +324,7 @@ ggscatter(toplot, x = 'log10FDR', y = 'Description', color = 'red', size = 'Odds
 dev.off()
 
 ## HEATMAPS ##
+# FIXME This hard-coded path will fail
 load("~/project/Gozde_data/RNA-seq/R_objs/GM_counts_keep.RData")
 
 GM_counts_norm = log2(cpm(GM_counts_keep) + 1)
@@ -563,6 +571,7 @@ dev.off()
 ## GM vs JU
 
 # Load datasets
+# FIXME This hard-coded path will fail
 load(file="~/project/Gozde_data/RNA-seq/R_objs/JU_counts_keep.RData")
 load(file="~/project/Gozde_data/RNA-seq/R_objs/GM_counts_keep.RData")
 
@@ -609,6 +618,7 @@ rio::export(DU_GM_JU, file="~/project/Gozde_data/RNA-seq/files/DU_GM_vs_JU.xlsx"
 ## GM and JU markers in AU vs DU
 
 
+# FIXME This hard-coded path will fail
 load(file="~/project/Gozde_data/RNA-seq/R_objs/GM_RNA_DDS.RData")
 load(file="~/project/Gozde_data/RNA-seq/R_objs/JU_RNA_DDS.RData")
 
@@ -627,6 +637,7 @@ ju_au_du_up = ju_au_du[ju_au_du$log2FoldChange > 0.6 & ju_au_du$padj < 0.05,] %>
 #length(intersect(gm_ju_down, gm_au_du_up)) / length(union(gm_ju_down, gm_au_du_up))
 
 
+# TODO Add to pixi
 library(GeneOverlap)
 gm_ju_list = list(gm_ju_up, gm_ju_down)
 au_du_list = list(gm_au_du_up, ju_au_du_up)
@@ -707,6 +718,7 @@ dev.off()
 
 
 # Overlaps - AI-DU and AU-DU
+# TODO Add to pixi
 library(VennDiagram)
 
 pdf('JU_AIDU_AUDU_OVERLAP.pdf')
@@ -730,6 +742,7 @@ draw.pairwise.venn(area1 = length(c(ai_up, ai_down)),
 dev.off()
 
 # Overlap with GM
+# FIXME This hard-coded path will fail
 load(file="~/project/Gozde_data/RNA-seq/R_objs/GM_RNA_DDS.RData")
 GM_AU_DU = results(GM_RNA_DDS, c("Group_GM", "GM_AU", "GM_DU"), format = "DataFrame")
 GM_AU_DU = GM_AU_DU[!(is.na(GM_AU_DU$padj)),]
@@ -747,6 +760,7 @@ draw.pairwise.venn(area1 = length(c(au_up, au_down)),
 			cat.cex = 2, cat.fontface = 'bold', margin = 0.13)
 dev.off()
 
+# TODO Add to pixi
 library(GeneOverlap)
 resgom = newGOM(list(c(au_up, au_down)), list(c(au_up_gm, au_down_gm)), genome.size = nrow(GM_AU_DU))
 pvalmat = getMatrix(resgom, name="pval")
@@ -870,6 +884,7 @@ dev.off()
 
 
 ## HEATMAPS ##
+# FIXME This hard-coded path will fail
 load("~/project/Gozde_data/RNA-seq/R_objs/JU_counts_keep.RData")
 
 JU_counts_norm = log2(cpm(JU_counts_keep) + 1)

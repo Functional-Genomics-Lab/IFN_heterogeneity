@@ -21,12 +21,18 @@ bioconductor-deseq2 = ">=1.30.1,<2"
 bioconductor-edger = ">=3.32.1,<4"
 bioconductor-soggi = ">=1.10.4,<2"
 r-markdown = ">=1.7,<2"
+r-reshape2 = ">=1.4.4,<2"
+r-ggrepel = ">=0.9.3,<0.10"
+r-ggrastr = ">=1.0.2,<2"
+r-pheatmap = ">=1.0.12,<2"
+r-stringr = ">=1.5.0,<2"
 
 [feature.rnaseq.tasks]
 align = { cmd = "01_STAR_align.sh", cwd = "RNA-seq" }
 filter = { cmd = "02_samtools_filter.sh", depends-on = ["align"], cwd = "RNA-seq" }
 index = { cmd = "03_bam_index.sh", depends-on = ["filter"], cwd = "RNA-seq" }
 DEG_analysis = { cmd = "Rscript -e \"rmarkdown::render('04_DEG_analysis.Rmd')\"", depends-on = ["filter", "index"], cwd = "RNA-seq" }  # TODO outputs = ["report.html"]
+plots = { cmd = "Rscript -e \"rmarkdown::render('04_DEG_analysis.Rmd')\"", depends-on = ["DEG_analysis", "index"], cwd = "RNA-seq", outputs = ["BoxPlot_MotifGenes_common_JU.pdf", "PCA_GM.pdf", "PCA_JU.pdf", "Boxplot_IFNB1_GM.pdf"] }
 
 [environments]
 rnaseq = ["rnaseq"]

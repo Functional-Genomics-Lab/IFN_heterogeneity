@@ -139,6 +139,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-base64enc-0.1_3-r41h06615bd_1005.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-bbmle-1.0.25-r41hc72bb7e_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-bdsmatrix-1.3_6-r41h06615bd_1.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/r-beeswarm-0.4.0-r41h06615bd_2.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-bh-1.81.0_1-r41hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-bit-4.0.5-r41h06615bd_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-bit64-4.0.5-r41h06615bd_1.tar.bz2
@@ -148,6 +149,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-brio-1.1.3-r41h06615bd_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-bslib-0.5.0-r41hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-cachem-1.0.8-r41h57805ef_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/r-cairo-1.6_0-r41h06615bd_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-callr-3.7.3-r41hc72bb7e_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-cli-3.6.1-r41h38f115c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-clipr-0.8.0-r41hc72bb7e_1.tar.bz2
@@ -182,7 +184,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-futile.options-1.0.1-r41hc72bb7e_1003.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-generics-0.1.3-r41hc72bb7e_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-gert-1.5.0-r41h163148b_3.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-ggbeeswarm-0.7.2-r41hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-ggplot2-3.4.2-r41hc72bb7e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-ggrastr-1.0.2-r41hc72bb7e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/r-ggrepel-0.9.3-r41h38f115c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-gh-1.4.0-r41hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-gitcreds-0.1.2-r41hc72bb7e_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-glue-1.6.2-r41h06615bd_1.tar.bz2
@@ -226,6 +231,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-nlme-3.1_162-r41hac0b197_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-numderiv-2016.8_1.1-r41hc72bb7e_4.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-openssl-2.0.5-r41hb1dc35e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-pheatmap-1.0.12-r41hc72bb7e_3.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-pillar-1.9.0-r41hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-pkgbuild-1.4.0-r41hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-pkgconfig-2.0.3-r41hc72bb7e_2.tar.bz2
@@ -287,6 +293,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-usethis-2.2.0-r41hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-utf8-1.2.3-r41h133d619_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-vctrs-0.6.2-r41ha503ecb_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-vipor-0.4.5-r41hc72bb7e_1004.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-viridislite-0.4.1-r41hc72bb7e_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-waldo-0.5.1-r41hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-whisker-0.4.1-r41hc72bb7e_0.conda
@@ -2667,6 +2674,22 @@ packages:
   size: 350118
   timestamp: 1665281512010
 - kind: conda
+  name: r-beeswarm
+  version: 0.4.0
+  build: r41h06615bd_2
+  build_number: 2
+  subdir: linux-64
+  url: https://conda.anaconda.org/conda-forge/linux-64/r-beeswarm-0.4.0-r41h06615bd_2.tar.bz2
+  sha256: b9af519176274ba0958e121cfbbf4276ce53a2ac3d6e32a4d56923990c91600e
+  md5: 06934d7dcf4b19816b530035d8c5fc8b
+  depends:
+  - libgcc-ng >=12
+  - r-base >=4.1,<4.2.0a0
+  license: Artistic-2.0
+  license_family: OTHER
+  size: 89869
+  timestamp: 1665301144536
+- kind: conda
   name: r-bh
   version: 1.81.0_1
   build: r41hc72bb7e_0
@@ -2819,6 +2842,25 @@ packages:
   license_family: MIT
   size: 74932
   timestamp: 1682999062145
+- kind: conda
+  name: r-cairo
+  version: 1.6_0
+  build: r41h06615bd_1
+  build_number: 1
+  subdir: linux-64
+  url: https://conda.anaconda.org/conda-forge/linux-64/r-cairo-1.6_0-r41h06615bd_1.tar.bz2
+  sha256: cf69a9c4c6dc9f07e88e6fba5bbda61ace2eadb825c6439f970a07e4344be192
+  md5: 64f0c236dc4f71cc293cf8e645bc5aa1
+  depends:
+  - cairo >=1.16.0,<2.0a0
+  - cairo >=1.2
+  - libgcc-ng >=12
+  - r-base >=4.1,<4.2.0a0
+  - xorg-libxt
+  license: GPL-2.0-or-later
+  license_family: GPL2
+  size: 105550
+  timestamp: 1665357727525
 - kind: conda
   name: r-callr
   version: 3.7.3
@@ -3443,6 +3485,25 @@ packages:
   size: 199992
   timestamp: 1665221877697
 - kind: conda
+  name: r-ggbeeswarm
+  version: 0.7.2
+  build: r41hc72bb7e_0
+  subdir: noarch
+  noarch: generic
+  url: https://conda.anaconda.org/conda-forge/noarch/r-ggbeeswarm-0.7.2-r41hc72bb7e_0.conda
+  sha256: 4a17dbaf9c95f8204b61cbd3503a5589c611e75f7d72af8517552f9ca6db9a36
+  md5: 96ab77b2568a916803ce7eb096b2d4cf
+  depends:
+  - r-base >=4.1,<4.2.0a0
+  - r-beeswarm
+  - r-ggplot2 >=3.3.0
+  - r-lifecycle
+  - r-vipor
+  license: GPL-3.0-or-later
+  license_family: GPL3
+  size: 1749998
+  timestamp: 1682815375259
+- kind: conda
   name: r-ggplot2
   version: 3.4.2
   build: r41hc72bb7e_0
@@ -3469,6 +3530,46 @@ packages:
   license_family: MIT
   size: 4134917
   timestamp: 1680765890857
+- kind: conda
+  name: r-ggrastr
+  version: 1.0.2
+  build: r41hc72bb7e_0
+  subdir: noarch
+  noarch: generic
+  url: https://conda.anaconda.org/conda-forge/noarch/r-ggrastr-1.0.2-r41hc72bb7e_0.conda
+  sha256: 35b27082ddb3e9af7214e6c3fc5a59a82f5f86b640f6f414eb860dee2b9822f2
+  md5: 550b4eb6e94df6e6568b99496da4fc90
+  depends:
+  - r-base >=4.1,<4.2.0a0
+  - r-cairo >=1.5.9
+  - r-ggbeeswarm
+  - r-ggplot2 >=2.1.0
+  - r-png
+  - r-ragg
+  license: MIT
+  license_family: MIT
+  size: 2573675
+  timestamp: 1685604962461
+- kind: conda
+  name: r-ggrepel
+  version: 0.9.3
+  build: r41h38f115c_0
+  subdir: linux-64
+  url: https://conda.anaconda.org/conda-forge/linux-64/r-ggrepel-0.9.3-r41h38f115c_0.conda
+  sha256: 4583a9300b0ca2fdbca1f1b0a06d28fde0bfabf547053cb99d256cf5b594b3bc
+  md5: cdaeb50b11acb4b1126cd76b51b5f0f4
+  depends:
+  - libgcc-ng >=12
+  - libstdcxx-ng >=12
+  - r-base >=4.1,<4.2.0a0
+  - r-ggplot2 >=2.2.0
+  - r-rcpp
+  - r-rlang >=0.3.0
+  - r-scales >=0.5.0
+  license: GPL-3.0-only
+  license_family: GPL3
+  size: 268707
+  timestamp: 1675430972889
 - kind: conda
   name: r-gh
   version: 1.4.0
@@ -4234,6 +4335,25 @@ packages:
   license_family: MIT
   size: 635696
   timestamp: 1670305716039
+- kind: conda
+  name: r-pheatmap
+  version: 1.0.12
+  build: r41hc72bb7e_3
+  build_number: 3
+  subdir: noarch
+  noarch: generic
+  url: https://conda.anaconda.org/conda-forge/noarch/r-pheatmap-1.0.12-r41hc72bb7e_3.tar.bz2
+  sha256: 2257b397cc36b64e6ee5a981548625b2f60a9cb5b07197816d26b9bdecf89740
+  md5: 235932d590cc0232febc0b3f2d8c34cb
+  depends:
+  - r-base >=4.1,<4.2.0a0
+  - r-gtable
+  - r-rcolorbrewer
+  - r-scales
+  license: GPL-2.0-only
+  license_family: GPL2
+  size: 92041
+  timestamp: 1665287038708
 - kind: conda
   name: r-pillar
   version: 1.9.0
@@ -5459,6 +5579,22 @@ packages:
   license_family: MIT
   size: 1241121
   timestamp: 1681943409672
+- kind: conda
+  name: r-vipor
+  version: 0.4.5
+  build: r41hc72bb7e_1004
+  build_number: 1004
+  subdir: noarch
+  noarch: generic
+  url: https://conda.anaconda.org/conda-forge/noarch/r-vipor-0.4.5-r41hc72bb7e_1004.tar.bz2
+  sha256: 958c0465412e253fe2fb2033fb017910d3100e9b5d2417c7fbd502cecf345c2f
+  md5: dc9fc6f6fb892a36f6e2ccae41757d8a
+  depends:
+  - r-base >=4.1,<4.2.0a0
+  license: GPL-2.0-or-later
+  license_family: GPL3
+  size: 4470229
+  timestamp: 1665334529430
 - kind: conda
   name: r-viridislite
   version: 0.4.1
