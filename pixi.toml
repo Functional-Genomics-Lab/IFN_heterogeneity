@@ -13,6 +13,7 @@ samtools = "1.10.*"
 [feature.rnaseq.tasks]
 align = { cmd = "01_STAR_align.sh", cwd = "RNA-seq" }
 filter = { cmd = "02_samtools_filter.sh", depends-on = ["align"], cwd = "RNA-seq" }
+index = { cmd = "03_bam_index.sh", depends-on = ["filter"], cwd = "RNA-seq" }
 
 [environments]
 rnaseq = ["rnaseq"]
