@@ -2,10 +2,6 @@
 authors = ["Edmund Miller <git@edmundmiller.dev>"]
 channels = ["conda-forge", "bioconda"]
 description = "Add a short description here"
-name = "RNA-seq"
+name = "IFN_heterogeneity"
 platforms = ["linux-64"]
 version = "0.1.0"
-
-[tasks]
-
-[dependencies]
