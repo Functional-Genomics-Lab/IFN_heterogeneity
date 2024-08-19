@@ -212,6 +212,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-lifecycle-1.0.3-r41hc72bb7e_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-locfit-1.5_9.7-r41h133d619_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-magrittr-2.0.3-r41h06615bd_1.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-markdown-1.7-r41hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-mass-7.3_58.3-r41h133d619_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-matrix-1.5_4.1-r41h316c678_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-matrixstats-1.0.0-r41h57805ef_0.conda
@@ -3990,6 +3991,24 @@ packages:
   license_family: MIT
   size: 220786
   timestamp: 1665088026110
+- kind: conda
+  name: r-markdown
+  version: '1.7'
+  build: r41hc72bb7e_0
+  subdir: noarch
+  noarch: generic
+  url: https://conda.anaconda.org/conda-forge/noarch/r-markdown-1.7-r41hc72bb7e_0.conda
+  sha256: 10ec4ad8ff836b1ba7d9176af6e949c59aacf3f073d38689b02787b980148876
+  md5: c6b636efd60847280f0fbe4bce486636
+  depends:
+  - r-base >=4.1,<4.2.0a0
+  - r-commonmark
+  - r-mime >=0.3
+  - r-xfun
+  license: GPL-2.0-only
+  license_family: GPL2
+  size: 178279
+  timestamp: 1684239611605
 - kind: conda
   name: r-mass
   version: 7.3_58.3
