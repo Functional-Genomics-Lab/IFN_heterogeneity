@@ -5,4 +5,22 @@ environments:
     - url: https://conda.anaconda.org/conda-forge/
     - url: https://conda.anaconda.org/bioconda/
     packages: {}
-packages: []
+  rnaseq:
+    channels:
+    - url: https://conda.anaconda.org/conda-forge/
+    - url: https://conda.anaconda.org/bioconda/
+    packages:
+      linux-64:
+      - conda: https://conda.anaconda.org/bioconda/linux-64/star-2.7.3a-0.tar.bz2
+packages:
+- kind: conda
+  name: star
+  version: 2.7.3a
+  build: '0'
+  subdir: linux-64
+  url: https://conda.anaconda.org/bioconda/linux-64/star-2.7.3a-0.tar.bz2
+  sha256: 264b7f7d91739e0214fe0f11451cde30e0deb54f5aa81922396436376a44e3b0
+  md5: d16d12158e2163c50918b8bafb05e034
+  license: GPLv3
+  size: 3611002
+  timestamp: 1570566907609

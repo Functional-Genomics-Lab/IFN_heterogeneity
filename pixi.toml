@@ -5,3 +5,12 @@ description = "Add a short description here"
 name = "IFN_heterogeneity"
 platforms = ["linux-64"]
 version = "0.1.0"
+
+[feature.rnaseq.dependencies]
+star = "2.7.3a.*"
+
+[feature.rnaseq.tasks]
+align = { cmd = "01_STAR_align.sh", cwd = "RNA-seq" }
+
+[environments]
+rnaseq = ["rnaseq"]
